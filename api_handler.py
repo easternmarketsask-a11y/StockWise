@@ -8,16 +8,16 @@ class CloverAPIHandler:
         # 尝试加载 .env 文件
         load_dotenv()
         
+        # 支持多种环境变量名称格式
         self.api_key = str(os.environ.get("CLOVER_API_KEY", "")).strip()
-        self.merchant_id = str(os.environ.get("MERCHANT_ID", "")).strip()
+        self.merchant_id = str(os.environ.get("MERCHANT_ID", "")).strip() or str(os.environ.get("CLOVER_MERCHANT_ID", "")).strip()
         
         # 显示配置状态（仅用于调试）
         if not self.api_key or not self.merchant_id:
-            st.error("⚠️ API 配置缺失：请在 .env 文件中设置 CLOVER_API_KEY 和 MERCHANT_ID")
-            st.info("📝 配置步骤：")
-            st.info("1. 复制 .env.example 为 .env")
-            st.info("2. 填入你的 Clover API 密钥和商户 ID")
-            st.info("3. 重启应用")
+            st.error("⚠️ API 配置缺失：请设置环境变量")
+            st.info("📝 环境变量设置：")
+            st.info("• CLOVER_API_KEY")
+            st.info("• MERCHANT_ID 或 CLOVER_MERCHANT_ID")
         
         self.base_url = f"https://api.clover.com/v3/merchants/{self.merchant_id}"
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
