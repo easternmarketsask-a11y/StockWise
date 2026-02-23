@@ -1,0 +1,16 @@
+[general]
+name = "StockWise EasternMarket"
+
+[server]
+port = 8501
+address = "0.0.0.0"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#1E88E5"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
