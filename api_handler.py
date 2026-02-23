@@ -30,6 +30,13 @@ class CloverAPIHandler:
             while True:
                 url = f"{_self.base_url}/items"
                 res = requests.get(url, headers=_self.headers, params={"limit": limit, "offset": offset}, timeout=15)
+                
+                # 检查响应状态
+                if res.status_code != 200:
+                    st.error(f"❌ API 请求失败: HTTP {res.status_code}")
+                    st.error(f"📝 响应内容: {res.text[:200]}...")
+                    return []
+                
                 data = res.json().get("elements", [])
                 for e in data:
                     items.append({
@@ -43,7 +50,14 @@ class CloverAPIHandler:
                 if len(data) < limit: break
                 offset += limit
             return items
-        except: return []
+        except requests.exceptions.RequestException as e:
+            st.error(f"🌐 网络请求错误: {str(e)}")
+            st.error("💡 可能原因: 网络连接问题、API 服务器无响应或防火墙阻止")
+            return []
+        except Exception as e:
+            st.error(f"❌ 未知错误: {str(e)}")
+            st.error(f"🔍 调试信息: API Key 长度={len(self.api_key)}, Merchant ID={self.merchant_id}")
+            return []
 
     def fetch_targeted_sales(self, item_ids, start_ts, end_ts):
         """100% 还原 v1.3.1 逻辑：逐个 ID 精准打击，支持跨年"""
