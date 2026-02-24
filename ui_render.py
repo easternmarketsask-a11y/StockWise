@@ -48,18 +48,24 @@ class UIRenderer:
     @staticmethod
     def render_header():
         """渲染品牌 Logo 和标题"""
-        st.markdown("""
-            <div style="display: flex; align-items: flex-end; margin-bottom: 2px;">
-                <div class="logo-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
-                    </svg>
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("""
+                <div style="display: flex; align-items: flex-end; margin-bottom: 2px;">
+                    <div class="logo-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                        </svg>
+                    </div>
+                    <span class="logo-text">StockWise</span>
                 </div>
-                <span class="logo-text">StockWise</span>
-            </div>
-            <p class="subtitle">EasternMarket 商品销量查询系统</p>
-            <hr>
-        """, unsafe_allow_html=True)
+                <p class="subtitle">EasternMarket 商品销量查询系统</p>
+                <hr>
+            """, unsafe_allow_html=True)
+        with col2:
+            if st.button("🚪 退出登录", key="logout"):
+                st.session_state.authenticated = False
+                st.rerun()
 
     @staticmethod
     def render_custom_footer():

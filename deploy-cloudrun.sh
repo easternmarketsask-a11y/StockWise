@@ -12,8 +12,8 @@ if ! command -v gcloud &> /dev/null; then
     exit 1
 fi
 
-# 设置项目变量
-PROJECT_ID="your-project-id"  # 请替换为你的 GCP 项目 ID
+# 设置项目变量 (请修改为你的实际配置)
+PROJECT_ID="your-gcp-project-id"  # 🔧 请替换为你的 GCP 项目 ID
 SERVICE_NAME="stockwise"
 REGION="us-central1"         # 可以修改为最近的区域
 

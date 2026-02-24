@@ -7,6 +7,19 @@ from ui_render import UIRenderer
 
 def main():
     st.set_page_config(page_title="StockWise | EasternMarket", layout="centered")
+    
+    # 密码验证
+    if not st.session_state.get('authenticated', False):
+        st.title("🔐 StockWise 访问验证")
+        password = st.text_input("请输入访问密码:", type="password")
+        if st.button("登录"):
+            if password == "8089":
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("密码错误，请重试。")
+        st.stop()
+    
     ui, api, engine = UIRenderer(), CloverAPIHandler(), DataEngine()
     ui.apply_style()
     ui.render_header()
