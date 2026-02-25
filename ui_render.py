@@ -12,6 +12,27 @@ class UIRenderer:
                 max-width: 800px !important;
             }
             
+            /* 移动端适配 */
+            @media (max-width: 768px) {
+                .block-container {
+                    padding-top: 1.5rem !important;
+                    padding-bottom: 1rem !important;
+                    max-width: 95% !important;
+                    padding-left: 1rem !important;
+                    padding-right: 1rem !important;
+                }
+                .logo-text {
+                    font-size: 1.8rem !important;
+                }
+                .subtitle {
+                    font-size: 0.9rem !important;
+                }
+                button[kind="primary"], .stDownloadButton button {
+                    padding: 0.4rem 1.5rem !important;
+                    font-size: 0.9rem !important;
+                }
+            }
+            
             /* 2. 隐藏 Streamlit 默认水印，保持右上角菜单可见 */
             footer {visibility: hidden;}
             header {visibility: visible !important;}
