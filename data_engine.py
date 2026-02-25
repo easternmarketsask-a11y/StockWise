@@ -22,7 +22,10 @@ class DataEngine:
             
             if target_id and target_id in sales_stats:
                 u_qty = s.get("unitQty")
-                val = (u_qty / 1000) if u_qty is not None else 1
+                if u_qty is not None and u_qty > 0:
+                    val = u_qty / 1000  # 转换为合适的单位
+                else:
+                    val = 1  # 如果没有数量或数量为0，默认为1个单位
                 sales_stats[target_id]["qty"] += val
                 sales_stats[target_id]["rev"] += (s.get("price", 0) / 100)
 
@@ -50,7 +53,10 @@ class DataEngine:
                 ref = inv_lookup.get(item_id, {})
                 summary[key] = {"商品名称": name, "SKU": ref.get("sku", "-"), "Product Code": ref.get("code", "-"), "累计销量": 0.0, "累计金额": 0.0}
             u_qty = s.get("unitQty")
-            val = (u_qty / 1000) if u_qty is not None else 1
+            if u_qty is not None and u_qty > 0:
+                val = u_qty / 1000  # 转换为合适的单位
+            else:
+                val = 1  # 如果没有数量或数量为0，默认为1个单位
             summary[key]["累计销量"] += val
             summary[key]["累计金额"] += (s.get("price", 0) / 100)
             
