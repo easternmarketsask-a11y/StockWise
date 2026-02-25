@@ -8,6 +8,7 @@ from chart_engine import ChartEngine
 from inventory_alert import InventoryAlert
 from trend_analysis import TrendAnalysis
 from multi_lang import MultiLanguage
+from product_ai_manager import ProductAIManager
 
 def main():
     # 多语言支持
@@ -29,6 +30,7 @@ def main():
     
     ui, api, engine = UIRenderer(), CloverAPIHandler(), DataEngine()
     chart_engine, alert_system, trend_analyzer = ChartEngine(), InventoryAlert(api), TrendAnalysis(api)
+    ai_manager = ProductAIManager(api)
     ui.apply_style()
     
     # 渲染头部和语言选择
@@ -48,7 +50,13 @@ def main():
         st.warning(f"⚠️ {ml.get_text('no_products')}")
 
     # 功能标签页
-    tab1, tab2, tab3, tab4 = st.tabs([ml.get_text('search_title'), ml.get_text('data_visualization'), ml.get_text('inventory_alerts'), ml.get_text('trend_analysis')])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        ml.get_text('search_title'), 
+        ml.get_text('data_visualization'), 
+        ml.get_text('inventory_alerts'), 
+        ml.get_text('trend_analysis'),
+        "🤖 智能管理"
+    ])
     
     with tab1:
         st.markdown(f"### {ml.get_text('search_title')}")
@@ -137,6 +145,10 @@ def main():
     
     with tab4:
         trend_analyzer.render_trend_dashboard(inventory)
+    
+    with tab5:
+        ai_manager.render_ai_dashboard(inventory)
+    
     ui.render_custom_footer()
 
 if __name__ == "__main__":
