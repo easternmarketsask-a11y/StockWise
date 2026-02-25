@@ -25,11 +25,13 @@ def main():
     ui.render_header()
 
     inventory = api.fetch_full_inventory()
-    if inventory:
-        st.markdown(f"<p style='color: #2E7D32; font-size: 0.8rem; margin-bottom: 10px;'>● 系统就绪: 已同步 {len(inventory)} 件商品</p>", unsafe_allow_html=True)
-    else:
+    if inventory is None:
         st.error("❌ 商品数据加载失败，请检查API配置和网络连接")
         st.stop()
+    elif inventory:
+        st.markdown(f"<p style='color: #2E7D32; font-size: 0.8rem; margin-bottom: 10px;'>● 系统就绪: 已同步 {len(inventory)} 件商品</p>", unsafe_allow_html=True)
+    else:
+        st.warning("⚠️ 店铺中暂无商品数据")
 
     st.markdown("### 🔍 销量分析查询")
     c1, c2 = st.columns(2)

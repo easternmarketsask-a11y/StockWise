@@ -36,7 +36,7 @@ class CloverAPIHandler:
                 if res.status_code != 200:
                     st.error(f"❌ API 请求失败: HTTP {res.status_code}")
                     st.error(f"📝 响应内容: {res.text[:200]}...")
-                    return []
+                    return None  # 返回None表示API失败
                 
                 data = res.json().get("elements", [])
                 for e in data:
@@ -54,11 +54,11 @@ class CloverAPIHandler:
         except requests.exceptions.RequestException as e:
             st.error(f"🌐 网络请求错误: {str(e)}")
             st.error("💡 可能原因: 网络连接问题、API 服务器无响应或防火墙阻止")
-            return []
+            return None  # 返回None表示网络错误
         except Exception as e:
             st.error(f"❌ 未知错误: {str(e)}")
-            st.error(f"🔍 调试信息: API Key 长度={len(self.api_key)}, Merchant ID={self.merchant_id}")
-            return []
+            st.error(f"🔍 调试信息: API Key 长度={len(_self.api_key)}, Merchant ID={_self.merchant_id}")
+            return None  # 返回None表示其他错误
 
     def fetch_targeted_sales(self, item_ids, start_ts, end_ts):
         """100% 还原 v1.3.1 逻辑：逐个 ID 精准打击，支持跨年"""
