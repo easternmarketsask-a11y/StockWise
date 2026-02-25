@@ -20,6 +20,7 @@ REGION="us-central1"         # 可以修改为最近的区域
 # 获取 API 凭据
 read -p "请输入你的 Clover API Key: " CLOVER_API_KEY
 read -p "请输入你的 Merchant ID: " MERCHANT_ID
+read -p "请输入你的 Gemini API Key: " GEMINI_API_KEY
 
 echo "📦 使用 Cloud Run 专用 Dockerfile 构建镜像..."
 
@@ -35,7 +36,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --platform managed \
   --region ${REGION} \
   --allow-unauthenticated \
-  --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY},MERCHANT_ID=${MERCHANT_ID} \
+  --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY},MERCHANT_ID=${MERCHANT_ID},GEMINI_API_KEY=${GEMINI_API_KEY} \
   --port 8080 \
   --memory 1Gi \
   --cpu 1 \
@@ -60,3 +61,6 @@ echo "   • 🚨 库存预警系统"
 echo "   • 📈 销售趋势分析"
 echo "   • 🌍 多语言支持 (中文/英文)"
 echo "   • 📱 移动端优化"
+echo "   • 🤖 AI 智能商品分类"
+echo "   • ✨ AI 智能描述生成"
+echo "   • 🔄 批量 AI 处理"

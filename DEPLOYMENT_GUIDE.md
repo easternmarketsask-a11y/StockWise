@@ -30,7 +30,8 @@ chmod +x deploy-cloudrun-updated.sh
 
 脚本会提示你输入：
 - Clover API Key
-- Merchant ID
+- Merchant ID  
+- Gemini API Key (新增)
 
 ### 4. 验证部署
 
@@ -66,11 +67,36 @@ chmod +x deploy-cloudrun-updated.sh
 - 触摸友好界面
 - 移动端布局优化
 
+### 🤖 AI 智能功能 (新增)
+- **智能商品分类**: 使用 Gemini API 自动分类商品
+  - 主类别识别 (生鲜、日用品、零食等)
+  - 子类别细分 (蔬菜、水果、肉类等)
+  - 商品属性标注 (有机、进口、本地等)
+  - 目标客户分析
+  - 存储要求建议
+
+- **智能描述生成**: AI 生成营销描述
+  - 多种长度选择 (简短/中等/详细)
+  - 突出商品特色和卖点
+  - 生成关键词和使用建议
+  - 营销导向的文案
+
+- **批量 AI 处理**: 
+  - 批量商品分类
+  - 批量描述生成
+  - 进度跟踪和结果导出
+
+- **分类统计分析**:
+  - 主类别分布图表
+  - 子类别统计
+  - 分类置信度分析
+
 ## 🔧 配置说明
 
 ### 环境变量
 - `CLOVER_API_KEY`: Clover API 访问密钥
 - `MERCHANT_ID`: 商户 ID
+- `GEMINI_API_KEY`: Gemini AI API 密钥 (新增)
 
 ### 资源配置
 - 内存: 1GB
