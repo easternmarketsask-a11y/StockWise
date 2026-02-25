@@ -100,6 +100,13 @@ class CloverAPIHandler:
                     ('offset', str(offset))
                 ]
                 res = requests.get(f"{self.base_url}/line_items", headers=self.headers, params=params, timeout=30)
+                
+                # 检查响应状态
+                if res.status_code != 200:
+                    st.error(f"❌ API 请求失败: HTTP {res.status_code}")
+                    st.error(f"📝 响应内容: {res.text[:200]}...")
+                    return None  # 返回None表示API失败
+                
                 data = res.json().get("elements", [])
                 if not data: break
                 all_data.extend(data)
@@ -108,4 +115,10 @@ class CloverAPIHandler:
                 offset += limit
             status_p.empty()
             return all_data
-        except: return []
+        except requests.exceptions.RequestException as e:
+            st.error(f"🌐 网络请求错误: {str(e)}")
+            st.error("💡 可能原因: 网络连接问题、API 服务器无响应或防火墙阻止")
+            return None  # 返回None表示网络错误
+        except Exception as e:
+            st.error(f"❌ 未知错误: {str(e)}")
+            return None  # 返回None表示其他错误

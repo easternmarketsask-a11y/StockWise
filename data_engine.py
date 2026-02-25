@@ -2,22 +2,14 @@ import pandas as pd
 
 class DataEngine:
     @staticmethod
-    def audit_process(query, inventory, raw_sales):
-        """精准审计：支持 ID 链接和名称双重校验"""
-        q = str(query).strip().lower()
-        matched_items = [
-            i for i in inventory 
-            if q in str(i.get('name') or "").lower() or \
-               q in str(i.get('sku') or "").lower() or \
-               q in str(i.get('code') or "").lower() or \
-               q in str(i.get('alt_code') or "").lower()
-        ]
-        
-        if not matched_items: return pd.DataFrame()
+    def audit_process(query, matched_items, raw_sales):
+        """精准审计：使用已过滤的matched_items进行数据匹配"""
+        if not matched_items or not raw_sales: 
+            return pd.DataFrame()
 
-        # 统计容器
-        sales_stats = {m['id']: {"qty": 0, "rev": 0} for m in matched_items}
-        name_map = {m['name'].lower(): m['id'] for m in matched_items}
+        # 统计容器 - 只处理匹配的商品
+        sales_stats = {item['id']: {"qty": 0, "rev": 0} for item in matched_items}
+        name_map = {item['name'].lower(): item['id'] for item in matched_items}
         
         for s in raw_sales:
             # 1. 优先尝试手动贴上的 ID 链接
@@ -35,12 +27,12 @@ class DataEngine:
                 sales_stats[target_id]["rev"] += (s.get("price", 0) / 100)
 
         res = []
-        for m in matched_items:
-            st_data = sales_stats[m['id']]
+        for item in matched_items:
+            st_data = sales_stats[item['id']]
             res.append({
-                "商品信息": m['name'], "售价": f"${m['price']:.2f}", 
+                "商品信息": item['name'], "售价": f"${item['price']:.2f}", 
                 "区间销量": round(st_data['qty'], 2), "销售总额": f"${st_data['rev']:.2f}", 
-                "标识符": f"{m.get('sku') or m.get('code') or '-'}"
+                "Product Code": f"{item.get('code') or '-'}", "SKU": f"{item.get('sku') or '-'}"
             })
         return pd.DataFrame(res)
 

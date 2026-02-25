@@ -50,7 +50,7 @@ def main():
                     # 抓取数据
                     raw_sales = api.fetch_targeted_sales([m['id'] for m in matched_items], s_ts, e_ts)
                     # 审计数据
-                    df = engine.audit_process(query, inventory, raw_sales)
+                    df = engine.audit_process(query, matched_items, raw_sales)
                     if not df.empty:
                         st.metric("汇总销量 (Qty/Lbs)", f"{df['区间销量'].sum():.2f}")
                         st.table(df)
@@ -63,16 +63,23 @@ def main():
     st.markdown("### 📦 报表工具")
     if st.button("导出近30天全店销售产品 CSV"):
         with st.spinner("同步全店流水中..."):
+            # 确保有inventory数据
+            if not inventory:
+                st.error("商品数据未加载，请刷新页面重试。")
+                return
+                
             start_30 = datetime.now() - timedelta(days=30)
             s_ts_30 = int(time.mktime(start_30.timetuple()) * 1000)
             e_ts_30 = int(time.mktime(datetime.now().timetuple()) * 1000)
             raw_sales_all = api.fetch_full_period_sales(s_ts_30, e_ts_30)
-            if raw_sales_all:
+            if raw_sales_all is None:
+                st.error("API请求失败，请检查网络连接和API权限。")
+            elif not raw_sales_all:
+                st.warning("该时间段内没有销售记录。")
+            else:
                 export_df = engine.prepare_export_csv(inventory, raw_sales_all)
                 csv = export_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("💾 点击下载报表.csv", csv, f"Sales_Summary_{datetime.now().strftime('%m%d')}.csv", "text/csv")
-            else:
-                st.error("未找到销售记录，请检查 API 权限。")
     ui.render_custom_footer()
 
 if __name__ == "__main__":
