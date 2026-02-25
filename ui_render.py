@@ -71,15 +71,23 @@ class UIRenderer:
         """渲染品牌 Logo 和标题"""
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.markdown("""
-                <div style="display: flex; align-items: flex-end; margin-bottom: 2px;">
-                    <div class="logo-icon">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
-                        </svg>
+            # 添加 Eastern Market Logo
+            try:
+                st.image("assets/eastern_market_logo.png", width=200)
+            except Exception:
+                # 如果 logo 文件不存在，显示备用图标
+                st.markdown("""
+                    <div style="display: flex; align-items: flex-end; margin-bottom: 2px;">
+                        <div class="logo-icon">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                            </svg>
+                        </div>
+                        <span class="logo-text">StockWise</span>
                     </div>
-                    <span class="logo-text">StockWise</span>
-                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("""
                 <p class="subtitle">EasternMarket 商品销量查询系统</p>
                 <hr>
             """, unsafe_allow_html=True)
