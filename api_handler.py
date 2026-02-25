@@ -18,6 +18,7 @@ class CloverAPIHandler:
             st.info("📝 环境变量设置：")
             st.info("• CLOVER_API_KEY")
             st.info("• MERCHANT_ID 或 CLOVER_MERCHANT_ID")
+            st.stop()  # 停止执行，避免后续错误
         
         self.base_url = f"https://api.clover.com/v3/merchants/{self.merchant_id}"
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
