@@ -71,11 +71,20 @@ class UIRenderer:
         """渲染品牌 Logo 和标题"""
         col1, col2 = st.columns([4, 1])
         with col1:
-            # 添加 Eastern Market Logo
-            try:
-                st.image("assets/eastern_market_logo.png", width=200)
-            except Exception:
-                # 如果 logo 文件不存在，显示备用图标
+            # 添加 Eastern Market Logo - 支持 JPEG 和 PNG 格式
+            logo_displayed = False
+            logo_formats = ["eastern_market_logo.jpg", "eastern_market_logo.jpeg", "eastern_market_logo.png"]
+            
+            for logo_file in logo_formats:
+                try:
+                    st.image(f"assets/{logo_file}", width=200)
+                    logo_displayed = True
+                    break
+                except Exception:
+                    continue
+            
+            # 如果所有 logo 文件都不存在，显示备用图标
+            if not logo_displayed:
                 st.markdown("""
                     <div style="display: flex; align-items: flex-end; margin-bottom: 2px;">
                         <div class="logo-icon">
