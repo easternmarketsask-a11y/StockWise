@@ -33,12 +33,11 @@ def main():
     ai_manager = ProductAIManager(api)
     ui.apply_style()
     
-    # 渲染头部和语言选择
-    header_col1, header_col2 = st.columns([4, 1])
-    with header_col1:
-        ui.render_header()
-    with header_col2:
-        ml.render_language_selector()
+    # 渲染头部 - LOGO置顶
+    ui.render_header()
+    
+    # 语言选择器下移到单独行
+    ml.render_language_selector()
 
     inventory = api.fetch_full_inventory()
     if inventory is None:
