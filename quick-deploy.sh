@@ -1,18 +1,16 @@
 #!/bin/bash
 
-# StockWise 快速同步和部署脚本
+# StockWise 快速同步和部署脚本 (Streamlit 版本)
 
-echo "🔄 StockWise 同步部署脚本"
+echo "🔄 StockWise Streamlit 同步部署脚本"
 
 # 1. 同步最新代码
 echo "📥 同步最新代码..."
 git pull origin main
 
-# 2. 检查是否有代码更改
-if git diff --quiet HEAD~1 HEAD -- .; then
-    echo "ℹ️  没有代码更改，跳过部署"
-    exit 0
-fi
+# 2. 检查当前提交
+echo "📋 当前提交信息:"
+git log --oneline -1
 
 # 3. 加载环境变量
 if [ -f .env ]; then
@@ -23,8 +21,8 @@ else
     exit 1
 fi
 
-# 4. 部署到 Cloud Run - 使用源代码构建确保最新代码
-echo "🚀 部署到 Cloud Run..."
+# 4. 部署到 Cloud Run - 使用源代码构建确保最新代码，强制 Streamlit 模式
+echo "🚀 部署 Streamlit 应用到 Cloud Run..."
 gcloud run deploy stockwise \
   --source . \
   --region us-central1 \
@@ -32,13 +30,17 @@ gcloud run deploy stockwise \
   --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY} \
   --set-env-vars MERCHANT_ID=${MERCHANT_ID} \
   --set-env-vars GEMINI_API_KEY=${GEMINI_API_KEY} \
-  --memory 512Mi \
+  --set-env-vars APP_MODE=streamlit \
+  --build-arg APP_MODE=streamlit \
+  --memory 1Gi \
   --cpu 1 \
-  --timeout 300
+  --timeout 300 \
+  --port 8080
 
-echo "✅ 部署完成！"
+echo "✅ Streamlit 应用部署完成！"
 
 # 5. 获取服务 URL
 SERVICE_URL=$(gcloud run services describe stockwise --region us-central1 --format 'value(status.url)')
 echo "🌐 应用地址: $SERVICE_URL"
-echo "📊 查看日志: gcloud logs tail stockwise --platform managed --region us-central1"
+echo "📊 查看日志: gcloud logs tail stockwise --platform managed --region us-central1 --limit 50"
+echo "🔍 调试模式: 查看启动日志确认 Streamlit 是否正常运行"
