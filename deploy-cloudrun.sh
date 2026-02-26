@@ -18,8 +18,18 @@ SERVICE_NAME="stockwise"
 REGION="us-central1"         # 可以修改为最近的区域
 
 # 获取 API 凭据
-read -p "请输入你的 Clover API Key: " CLOVER_API_KEY
-read -p "请输入你的 Merchant ID: " MERCHANT_ID
+if [ -f .env ]; then
+    echo "🔑 从 .env 文件加载环境变量..."
+    export $(grep -v '^#' .env | xargs)
+    CLOVER_API_KEY=${CLOVER_API_KEY}
+    MERCHANT_ID=${MERCHANT_ID}
+    GEMINI_API_KEY=${GEMINI_API_KEY}
+else
+    echo "❌ 未找到 .env 文件，请手动输入 API 凭据"
+    read -p "请输入你的 Clover API Key: " CLOVER_API_KEY
+    read -p "请输入你的 Merchant ID: " MERCHANT_ID
+    read -p "请输入你的 Gemini API Key: " GEMINI_API_KEY
+fi
 
 # 1. 构建 Docker 镜像
 echo "📦 构建 Docker 镜像..."
@@ -32,7 +42,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --platform managed \
   --region ${REGION} \
   --allow-unauthenticated \
-  --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY},MERCHANT_ID=${MERCHANT_ID} \
+  --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY},MERCHANT_ID=${MERCHANT_ID},GEMINI_API_KEY=${GEMINI_API_KEY} \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \

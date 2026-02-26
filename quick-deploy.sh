@@ -14,15 +14,24 @@ if git diff --quiet HEAD~1 HEAD -- .; then
     exit 0
 fi
 
-# 3. 部署到 Cloud Run
+# 3. 加载环境变量
+if [ -f .env ]; then
+    echo "🔑 加载环境变量..."
+    export $(grep -v '^#' .env | xargs)
+else
+    echo "❌ 未找到 .env 文件，请创建并配置 API keys"
+    exit 1
+fi
+
+# 4. 部署到 Cloud Run
 echo "🚀 部署到 Cloud Run..."
 gcloud run deploy stockwise-app \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars CLOVER_MERCHANT_ID=SN4FE813EDA51 \
-  --set-env-vars CLOVER_API_KEY=c7e0ed05-ecc2-0c33-25b1 \
-  --set-env-vars GEMINI_API_KEY=AIzaSyD2orlisbm1SfbS3qH
+  --set-env-vars CLOVER_MERCHANT_ID=${MERCHANT_ID} \
+  --set-env-vars CLOVER_API_KEY=${CLOVER_API_KEY} \
+  --set-env-vars GEMINI_API_KEY=${GEMINI_API_KEY}
 
 echo "✅ 部署完成！"
 

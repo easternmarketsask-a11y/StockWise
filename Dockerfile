@@ -14,11 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 暴露端口
-EXPOSE 8501
+EXPOSE 8080
 
 # 设置环境变量
-ENV PORT=8501
+ENV PORT=8080
 ENV PYTHONPATH=/app
 
 # 启动命令
-CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD ["uvicorn", "simple_app:app", "--host", "0.0.0.0", "--port", "8080"]
