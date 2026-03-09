@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Google Cloud Run 部署脚本
+# Google Cloud Run 部署脚本 - 包含域名配置
 # StockWise - EasternMarket
+# 域名: easternmarket.ca
 
 echo "🚀 开始部署 StockWise 到 Google Cloud Run..."
 
@@ -13,9 +14,10 @@ if ! command -v gcloud &> /dev/null; then
 fi
 
 # 设置项目变量 (请修改为你的实际配置)
-PROJECT_ID="your-gcp-project-id"  # 🔧 请替换为你的 GCP 项目 ID
+PROJECT_ID="stockwise-486801"  # 🔧 已更新为你的 GCP 项目 ID
 SERVICE_NAME="stockwise"
-REGION="us-central1"         # 可以修改为最近的区域
+REGION="us-central1"
+DOMAIN_NAME="easternmarket.ca"
 
 # 获取 API 凭据
 if [ -f .env ]; then
@@ -55,31 +57,36 @@ SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} \
   --format 'value(status.url)')
 
 echo "✅ 部署完成！"
-echo "🌐 应用地址: ${SERVICE_URL}"
+echo "🌐 临时地址: ${SERVICE_URL}"
 echo "📊 查看日志: gcloud logs tail ${SERVICE_NAME} --platform managed --region ${REGION}"
-echo "🔄 更新部署: gcloud run services update ${SERVICE_NAME} --platform managed --region ${REGION}"
 
-# 4. 配置自定义域名 (可选)
+# 4. 配置自定义域名
 echo ""
-echo "🌐 是否要配置自定义域名? (y/n)"
-read -p "输入域名 (如 easternmarket.ca): " CONFIGURE_DOMAIN
+echo "🌐 配置自定义域名: ${DOMAIN_NAME}"
 
-if [[ $CONFIGURE_DOMAIN == "y" || $CONFIGURE_DOMAIN == "Y" ]]; then
-    if [ -z "$DOMAIN_NAME" ]; then
-        read -p "请输入域名: " DOMAIN_NAME
-    fi
-    
-    echo "🔧 配置域名映射: ${DOMAIN_NAME}"
-    gcloud run domain-mappings create ${SERVICE_NAME} \
-      --domain=${DOMAIN_NAME} \
-      --region=${REGION} \
-      --service=${SERVICE_NAME}
-    
-    echo "✅ 域名配置完成！"
-    echo "🌐 固定访问地址: https://${DOMAIN_NAME}"
-    echo "📋 DNS配置请在域名管理面板添加:"
-    echo "   Type: CNAME"
-    echo "   Name: @"
-    echo "   Value: ghs.googlehosted.com."
-    echo "   TTL: 3600"
-fi
+# 创建域名映射
+echo "🔧 创建域名映射..."
+gcloud run domain-mappings create ${SERVICE_NAME} \
+  --domain=${DOMAIN_NAME} \
+  --region=${REGION} \
+  --service=${SERVICE_NAME}
+
+echo "✅ 域名配置完成！"
+echo "🌐 固定访问地址: https://${DOMAIN_NAME}"
+echo ""
+echo "📋 重要 - DNS配置步骤:"
+echo "1. 登录你的域名管理面板 (如 GoDaddy, Namecheap等)"
+echo "2. 添加以下DNS记录:"
+echo "   Type: CNAME"
+echo "   Name: @"
+echo "   Value: ghs.googlehosted.com."
+echo "   TTL: 3600"
+echo ""
+echo "3. 等待DNS传播 (通常5-15分钟)"
+echo "4. 验证域名: curl -I https://${DOMAIN_NAME}"
+echo ""
+echo "🔍 检查域名映射状态:"
+echo "gcloud run domain-mappings list --region=${REGION}"
+echo ""
+echo "📊 查看SSL证书状态:"
+echo "gcloud run domain-mappings describe ${DOMAIN_NAME} --region=${REGION}"
