@@ -17,10 +17,9 @@ cd /opt/stockwise
 
 # 4. 上传项目文件 (需要手动上传)
 echo "请将以下文件上传到 /opt/stockwise/ 目录："
-echo "- main.py"
+echo "- web_app.py"
 echo "- api_handler.py" 
 echo "- data_engine.py"
-echo "- ui_render.py"
 echo "- requirements.txt"
 echo "- .env"
 
@@ -35,14 +34,14 @@ pip install python-dotenv
 # 7. 创建 systemd 服务
 sudo tee /etc/systemd/system/stockwise.service > /dev/null <<EOF
 [Unit]
-Description=StockWise Streamlit App
+Description=StockWise FastAPI App
 After=network.target
 
 [Service]
 User=root
 WorkingDirectory=/opt/stockwise
 Environment=PATH=/opt/stockwise/.venv/bin
-ExecStart=/opt/stockwise/.venv/bin/streamlit run main.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+ExecStart=/opt/stockwise/.venv/bin/uvicorn web_app:app --host 0.0.0.0 --port 8080
 Restart=always
 
 [Install]
@@ -58,5 +57,5 @@ sudo systemctl start stockwise
 sudo systemctl status stockwise
 
 echo "✅ 部署完成！"
-echo "🌐 访问地址: http://你的服务器IP:8501"
+echo "🌐 访问地址: http://你的服务器IP:8080"
 echo "📝 查看日志: sudo journalctl -u stockwise -f"

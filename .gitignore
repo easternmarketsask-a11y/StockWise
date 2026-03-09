@@ -120,9 +120,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Streamlit
-.streamlit/
-
 # Environment variables
 .env
 .env.local

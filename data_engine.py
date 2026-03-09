@@ -51,7 +51,7 @@ class DataEngine:
             key = item_id if item_id else f"T_{name}"
             if key not in summary:
                 ref = inv_lookup.get(item_id, {})
-                summary[key] = {"商品名称": name, "SKU": ref.get("sku", "-"), "Product Code": ref.get("code", "-"), "累计销量": 0.0, "累计金额": 0.0}
+                summary[key] = {"商品名称": name, "SKU": ref.get("sku", "-"), "Product Code": ref.get("code", "-"), "单价": f"${ref.get('price', 0)/100:.2f}", "累计销量": 0.0, "累计金额": 0.0}
             u_qty = s.get("unitQty")
             if u_qty is not None and u_qty > 0:
                 val = u_qty / 1000  # 转换为合适的单位

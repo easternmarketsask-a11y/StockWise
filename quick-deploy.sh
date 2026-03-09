@@ -4,6 +4,8 @@
 
 echo "🔄 StockWise FastAPI 部署脚本"
 
+ SERVICE_NAME=${SERVICE_NAME:-${1:-stockwise}}
+
 # 1. 同步最新代码
 echo "📥 同步最新代码..."
 git pull origin main
@@ -23,7 +25,7 @@ fi
 
 # 4. 部署到 Cloud Run - FastAPI 应用
 echo "🚀 部署 FastAPI 应用到 Cloud Run..."
-gcloud run deploy stockwise \
+gcloud run deploy ${SERVICE_NAME} \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
@@ -38,7 +40,11 @@ gcloud run deploy stockwise \
 echo "✅ FastAPI 应用部署完成！"
 
 # 5. 获取服务 URL
-SERVICE_URL=$(gcloud run services describe stockwise --region us-central1 --format 'value(status.url)')
+SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region us-central1 --format 'value(status.url)')
+LATEST_REVISION=$(gcloud run services describe ${SERVICE_NAME} --region us-central1 --format 'value(status.latestReadyRevisionName)')
+IMAGE=$(gcloud run services describe ${SERVICE_NAME} --region us-central1 --format 'value(spec.template.spec.containers[0].image)')
 echo "🌐 应用地址: $SERVICE_URL"
+echo "🧾 Latest Revision: $LATEST_REVISION"
+echo "🖼️  Image: $IMAGE"
 echo "📊 API 文档: $SERVICE_URL/docs"
-echo "📊 查看日志: gcloud logs tail stockwise --platform managed --region us-central1 --limit 50"
+echo "📊 查看日志: gcloud logs tail ${SERVICE_NAME} --platform managed --region us-central1 --limit 50"

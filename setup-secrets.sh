@@ -32,9 +32,17 @@ echo "🤖 创建 Gemini API Key secret..."
 gcloud secrets create gemini-api-key --replication-policy="automatic" --project=${PROJECT_ID}
 
 echo "📝 添加 secret values..."
-echo "c7e0ed05-ecc2-0c33-25b1" | gcloud secrets versions add clover-api-key --data-file=- --project=${PROJECT_ID}
-echo "SN4FE813EDA51" | gcloud secrets versions add merchant-id --data-file=- --project=${PROJECT_ID}
-echo "AIzaSyD2orlisbm1SfbS3qH" | gcloud secrets versions add gemini-api-key --data-file=- --project=${PROJECT_ID}
+echo "请手动输入你的 API Keys:"
+read -s -p "Clover API Key: " CLOVER_KEY
+echo ""
+read -s -p "Merchant ID: " MERCHANT_ID_VALUE
+echo ""
+read -s -p "Gemini API Key: " GEMINI_KEY
+echo ""
+
+echo "$CLOVER_KEY" | gcloud secrets versions add clover-api-key --data-file=- --project=${PROJECT_ID}
+echo "$MERCHANT_ID_VALUE" | gcloud secrets versions add merchant-id --data-file=- --project=${PROJECT_ID}
+echo "$GEMINI_KEY" | gcloud secrets versions add gemini-api-key --data-file=- --project=${PROJECT_ID}
 
 echo "✅ Secrets 创建完成！"
 
