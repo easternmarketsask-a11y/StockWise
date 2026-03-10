@@ -33,8 +33,9 @@ class CloverAPIHandler:
                 res = requests.get(url, headers=self.headers, params={"limit": limit, "offset": offset}, timeout=15)
 
                 if res.status_code != 200:
-                    logger.error(f"API request failed: HTTP {res.status_code} - {res.text[:200]}")
-                    return []
+                    msg = f"Clover API error {res.status_code}: {res.text[:300]}"
+                    logger.error(msg)
+                    raise RuntimeError(msg)
 
                 try:
                     data = res.json().get("elements", [])
@@ -62,9 +63,11 @@ class CloverAPIHandler:
                 offset += limit
             logger.info(f"Fetched {len(items)} products from Clover API")
             return items
+        except RuntimeError:
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error: {str(e)}")
-            return []
+            raise RuntimeError(f"Network error connecting to Clover API: {str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return []
@@ -123,8 +126,9 @@ class CloverAPIHandler:
                 res = requests.get(f"{self.base_url}/line_items", headers=self.headers, params=params, timeout=30)
 
                 if res.status_code != 200:
-                    logger.error(f"API request failed: HTTP {res.status_code}")
-                    return []
+                    msg = f"Clover API error {res.status_code}: {res.text[:300]}"
+                    logger.error(msg)
+                    raise RuntimeError(msg)
 
                 try:
                     data = res.json().get("elements", [])
@@ -146,9 +150,11 @@ class CloverAPIHandler:
                 offset += limit
             logger.info(f"Total sales records fetched: {len(all_data)}")
             return all_data
+        except RuntimeError:
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error: {str(e)}")
-            return []
+            raise RuntimeError(f"Network error connecting to Clover API: {str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return []

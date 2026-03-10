@@ -13,6 +13,9 @@ from fastapi.staticfiles import StaticFiles
 
 from api_handler import CloverAPIHandler
 from data_engine import DataEngine
+from product_manager import get_product_manager
+from ai_results_store import get_ai_results_store
+from ai_enhancements import get_ai_enhancements_engine
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +131,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
         .product-actions { position: relative; display: flex; gap: 8px; align-items: center; }
         .empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
         .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+        .footer { text-align: center; padding: 20px; color: #64748b; font-size: 14px; }
         @media (max-width: 900px) { .container { flex-direction: column; } .sidebar { width: 100%; } .sidebar-shell { position: static; padding: 14px; } .tabs { flex-direction: row; flex-wrap: wrap; } .tab-button { flex: 1 1 auto; text-align: center; } .cards, .grid-2, .grid-3, .metrics, .hero, .search-layout, .detail-grid { grid-template-columns: 1fr; } .header-inner { flex-direction: column; align-items: flex-start; } .header { padding: 16px 18px; } .header-badge, .panel-meta { display: none; } .panel-header { padding-bottom: 12px; margin-bottom: 16px; } .product-top { flex-direction: column; } .product-actions { width: 100%; } .two-column-actions { grid-template-columns: 1fr 1fr; } }
     </style>
 </head>
@@ -155,6 +159,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <section class="tabs">
                     <button class="tab-button active" data-tab="products">📦 销量查询</button>
                     <button class="tab-button" data-tab="categories">📂 商品分类</button>
+                    <button class="tab-button" data-tab="management">🛠️ 商品管理</button>
                     <button class="tab-button" data-tab="batch">⚙️ 批量处理</button>
                     <button class="tab-button" data-tab="analytics">📊 数据分析</button>
                 </section>
@@ -231,6 +236,77 @@ HTML_PAGE = r'''<!DOCTYPE html>
                     <button class="btn secondary" id="backToCategoriesButton">返回分类列表</button>
                 </div>
                 <div id="categoryProducts"></div>
+            </div>
+        </section>
+        <section id="management" class="tab-panel card">
+            <div class="panel-header">
+                <div class="panel-copy">
+                    <div class="panel-kicker">Product Management</div>
+                    <h2 class="panel-title">🛠️ 商品管理</h2>
+                    <p class="muted">管理商品信息、编辑AI处理结果、生成食谱推荐和商品图片提示词。所有数据保存在后端。</p>
+                </div>
+                <div class="panel-meta">编辑 · 导出 · AI增强</div>
+            </div>
+            <div class="tabs" style="flex-direction: row; margin-bottom: 20px;">
+                <button class="chip active" data-subtab="products-mgmt">📝 商品编辑</button>
+                <button class="chip" data-subtab="ai-results-mgmt">🤖 AI结果管理</button>
+                <button class="chip" data-subtab="recipe-gen">🍳 食谱生成</button>
+                <button class="chip" data-subtab="image-gen">🖼️ 图片提示词</button>
+            </div>
+            <div id="products-mgmt-panel" class="subtab-panel">
+                <div class="actions">
+                    <button class="btn" id="loadProductsButton">加载商品列表</button>
+                    <button class="btn secondary" id="exportProductsButton">导出商品数据</button>
+                    <button class="btn secondary" id="exportMergedButton">导出完整数据</button>
+                </div>
+                <div id="productMgmtStatus" class="status"></div>
+                <div id="productMgmtMetrics" class="metrics"></div>
+                <div id="productsList"></div>
+            </div>
+            <div id="ai-results-mgmt-panel" class="subtab-panel" style="display:none;">
+                <div class="actions">
+                    <button class="btn" id="loadAiResultsButton">加载AI结果</button>
+                    <button class="btn secondary" id="exportAiResultsButton">导出AI结果</button>
+                </div>
+                <div id="aiResultsMgmtStatus" class="status"></div>
+                <div id="aiResultsMgmtMetrics" class="metrics"></div>
+                <div id="aiResultsList"></div>
+            </div>
+            <div id="recipe-gen-panel" class="subtab-panel" style="display:none;">
+                <div class="grid-2">
+                    <div class="detail-section">
+                        <h3>生成食谱推荐</h3>
+                        <div><label for="recipeProductName">商品名称</label><input id="recipeProductName" placeholder="输入商品名称"></div>
+                        <div class="section-gap"><label for="recipeType">食谱类型</label><select id="recipeType"><option value="simple">简单易做</option><option value="detailed">详细步骤</option><option value="creative">创意料理</option></select></div>
+                        <div class="actions"><button class="btn" id="generateRecipeButton">生成食谱</button></div>
+                    </div>
+                    <div class="detail-section">
+                        <h3>批量生成</h3>
+                        <p class="muted-small">从销量查询中勾选商品，然后在这里批量生成食谱。</p>
+                        <div class="section-gap"><label for="batchRecipeType">食谱类型</label><select id="batchRecipeType"><option value="simple">简单易做</option><option value="detailed">详细步骤</option><option value="creative">创意料理</option></select></div>
+                        <div class="actions"><button class="btn" id="batchRecipeButton">批量生成食谱</button></div>
+                    </div>
+                </div>
+                <div id="recipeStatus" class="status"></div>
+                <div id="recipeResults"></div>
+            </div>
+            <div id="image-gen-panel" class="subtab-panel" style="display:none;">
+                <div class="grid-2">
+                    <div class="detail-section">
+                        <h3>生成图片提示词</h3>
+                        <div><label for="imageProductName">商品名称</label><input id="imageProductName" placeholder="输入商品名称"></div>
+                        <div class="section-gap"><label for="imageStyle">图片风格</label><select id="imageStyle"><option value="realistic">真实摄影</option><option value="artistic">艺术插画</option><option value="minimalist">极简主义</option><option value="lifestyle">生活场景</option></select></div>
+                        <div class="actions"><button class="btn" id="generateImageButton">生成提示词</button></div>
+                    </div>
+                    <div class="detail-section">
+                        <h3>批量生成</h3>
+                        <p class="muted-small">从销量查询中勾选商品，然后在这里批量生成图片提示词。</p>
+                        <div class="section-gap"><label for="batchImageStyle">图片风格</label><select id="batchImageStyle"><option value="realistic">真实摄影</option><option value="artistic">艺术插画</option><option value="minimalist">极简主义</option><option value="lifestyle">生活场景</option></select></div>
+                        <div class="actions"><button class="btn" id="batchImageButton">批量生成提示词</button></div>
+                    </div>
+                </div>
+                <div id="imageStatus" class="status"></div>
+                <div id="imageResults"></div>
             </div>
         </section>
         <section id="batch" class="tab-panel card">
@@ -796,7 +872,8 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <div class="detail-section section-gap">
                     <h3>当前队列 (${state.batchQueue.length} 个商品)</h3>
                     <div class="batch-list">${state.batchQueue.map((item, index) => `<div class="batch-item"><strong>${item['商品信息']}</strong><div class="muted-small">SKU: ${item['SKU']} · Code: ${item['Product Code']}</div><div class="inline-actions section-gap-sm"><button class="chip batch-remove" data-index="${index}">移除</button></div></div>`).join('')}</div>
-                  <div class="empty-state"><div class="empty-state-icon">⚙️</div><strong>批量队列为空</strong>请在销量查询中勾选商品后加入队列。</div>';
+                </div>
+            ` : '<div class="empty-state"><div class="empty-state-icon">⚙️</div><strong>批量队列为空</strong>请在销量查询中勾选商品后加入队列。</div>';
             const resultHtml = state.batchResults.length ? `
                 <div class="detail-section section-gap">
                     <h3>最近批量任务</h3>
@@ -1403,10 +1480,373 @@ HTML_PAGE = r'''<!DOCTYPE html>
 
         requestJson('/health').then(data => {
             const availability = data.features?.ai_enabled ? `已启用 (${data.features.ai_provider})` : '未配置';
-            document.getElementById('aiAvailability').textContent = availability;
+            const aiAvailabilityEl = document.getElementById('aiAvailability');
+            if (aiAvailabilityEl) aiAvailabilityEl.textContent = availability;
         }).catch(() => {
-            document.getElementById('aiAvailability').textContent = '状态未知';
+            const aiAvailabilityEl = document.getElementById('aiAvailability');
+            if (aiAvailabilityEl) aiAvailabilityEl.textContent = '状态未知';
         });
+
+        // ============================================================================
+        // NEW FEATURE HANDLERS - Product Management & Enhanced AI
+        // ============================================================================
+
+        // Product Management Tab Handlers
+        document.getElementById('loadProductsButton').addEventListener('click', async () => {
+            setStatus('productMgmtStatus', '正在加载商品数据...', 'info');
+            try {
+                const data = await requestJson('/api/products/managed');
+                setStatus('productMgmtStatus', `成功加载 ${data.count} 个商品`, 'success');
+                renderMetrics('productMgmtMetrics', [
+                    { label: '总商品数', value: data.statistics.total_products },
+                    { label: '有描述', value: data.statistics.with_description },
+                    { label: '有分类', value: data.statistics.with_category },
+                    { label: '完成度', value: data.statistics.completion_rate + '%' }
+                ]);
+                renderProductsList(data.products);
+            } catch (error) {
+                setStatus('productMgmtStatus', error.message, 'error');
+            }
+        });
+
+        document.getElementById('exportProductsButton').addEventListener('click', async () => {
+            try {
+                const data = await requestJson('/api/products/export?format=json');
+                const blob = new Blob([data.data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `products_export_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                setStatus('productMgmtStatus', '商品数据已导出', 'success');
+            } catch (error) {
+                setStatus('productMgmtStatus', error.message, 'error');
+            }
+        });
+
+        document.getElementById('exportMergedButton').addEventListener('click', async () => {
+            try {
+                const data = await requestJson('/api/products/merged');
+                const blob = new Blob([JSON.stringify(data.products, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `products_merged_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                setStatus('productMgmtStatus', '完整数据已导出（含AI结果）', 'success');
+            } catch (error) {
+                setStatus('productMgmtStatus', error.message, 'error');
+            }
+        });
+
+        // AI Results Management Handlers
+        document.getElementById('loadAiResultsButton').addEventListener('click', async () => {
+            setStatus('aiResultsMgmtStatus', '正在加载AI结果...', 'info');
+            try {
+                const data = await requestJson('/api/ai-results');
+                setStatus('aiResultsMgmtStatus', `成功加载 ${data.count} 条AI结果`, 'success');
+                renderMetrics('aiResultsMgmtMetrics', [
+                    { label: '总结果数', value: data.statistics.total_results },
+                    { label: '有分类', value: data.statistics.with_classification },
+                    { label: '有描述', value: data.statistics.with_description },
+                    { label: '有食谱', value: data.statistics.with_recipe }
+                ]);
+                renderAiResultsList(data.results);
+            } catch (error) {
+                setStatus('aiResultsMgmtStatus', error.message, 'error');
+            }
+        });
+
+        document.getElementById('exportAiResultsButton').addEventListener('click', async () => {
+            try {
+                const data = await requestJson('/api/ai-results/export?format=json');
+                const blob = new Blob([data.data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ai_results_export_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                setStatus('aiResultsMgmtStatus', 'AI结果已导出', 'success');
+            } catch (error) {
+                setStatus('aiResultsMgmtStatus', error.message, 'error');
+            }
+        });
+
+        // Recipe Generation Handlers
+        document.getElementById('generateRecipeButton').addEventListener('click', async () => {
+            const productName = document.getElementById('recipeProductName').value.trim();
+            const recipeType = document.getElementById('recipeType').value;
+            
+            if (!productName) {
+                setStatus('recipeStatus', '请输入商品名称', 'error');
+                return;
+            }
+            
+            setStatus('recipeStatus', '正在生成食谱推荐...', 'info');
+            try {
+                const data = await requestJson('/api/ai/recipe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_info: { name: productName },
+                        recipe_type: recipeType
+                    })
+                });
+                setStatus('recipeStatus', '食谱生成成功！', 'success');
+                renderRecipeResult(data.recipe);
+            } catch (error) {
+                setStatus('recipeStatus', error.message, 'error');
+            }
+        });
+
+        document.getElementById('batchRecipeButton').addEventListener('click', async () => {
+            if (state.selectedProducts.length === 0) {
+                setStatus('recipeStatus', '请先在销量查询中勾选商品', 'error');
+                return;
+            }
+            
+            const recipeType = document.getElementById('batchRecipeType').value;
+            setStatus('recipeStatus', `正在为 ${state.selectedProducts.length} 个商品生成食谱...`, 'info');
+            
+            try {
+                const products = state.selectedProducts.map(p => ({
+                    name: p['商品信息'],
+                    sku: p['SKU'],
+                    code: p['Product Code'],
+                    price: parseFloat(String(p['售价'] || '0').replace('$', ''))
+                }));
+                
+                const data = await requestJson('/api/ai/batch-recipe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ products, recipe_type: recipeType })
+                });
+                
+                setStatus('recipeStatus', `批量食谱生成完成：成功 ${data.result.success_count} 个，失败 ${data.result.failed_count} 个`, 
+                    data.result.failed_count > 0 ? 'error' : 'success');
+                renderBatchRecipeResults(data.result.results);
+            } catch (error) {
+                setStatus('recipeStatus', error.message, 'error');
+            }
+        });
+
+        // Image Prompt Generation Handlers
+        document.getElementById('generateImageButton').addEventListener('click', async () => {
+            const productName = document.getElementById('imageProductName').value.trim();
+            const style = document.getElementById('imageStyle').value;
+            
+            if (!productName) {
+                setStatus('imageStatus', '请输入商品名称', 'error');
+                return;
+            }
+            
+            setStatus('imageStatus', '正在生成图片提示词...', 'info');
+            try {
+                const data = await requestJson('/api/ai/image-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_info: { name: productName },
+                        style: style
+                    })
+                });
+                setStatus('imageStatus', '图片提示词生成成功！', 'success');
+                renderImagePromptResult(data.image_prompt);
+            } catch (error) {
+                setStatus('imageStatus', error.message, 'error');
+            }
+        });
+
+        document.getElementById('batchImageButton').addEventListener('click', async () => {
+            if (state.selectedProducts.length === 0) {
+                setStatus('imageStatus', '请先在销量查询中勾选商品', 'error');
+                return;
+            }
+            
+            const style = document.getElementById('batchImageStyle').value;
+            setStatus('imageStatus', `正在为 ${state.selectedProducts.length} 个商品生成图片提示词...`, 'info');
+            
+            try {
+                const products = state.selectedProducts.map(p => ({
+                    name: p['商品信息'],
+                    sku: p['SKU'],
+                    code: p['Product Code'],
+                    description: p['描述'] || ''
+                }));
+                
+                const data = await requestJson('/api/ai/batch-image-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ products, style })
+                });
+                
+                setStatus('imageStatus', `批量图片提示词生成完成：成功 ${data.result.success_count} 个，失败 ${data.result.failed_count} 个`, 
+                    data.result.failed_count > 0 ? 'error' : 'success');
+                renderBatchImageResults(data.result.results);
+            } catch (error) {
+                setStatus('imageStatus', error.message, 'error');
+            }
+        });
+
+        // Render Functions for New Features
+        function renderProductsList(products) {
+            const container = document.getElementById('productsList');
+            if (!products || products.length === 0) {
+                container.innerHTML = '<div class="empty-state"><strong>暂无商品数据</strong>点击"加载商品列表"按钮获取数据。</div>';
+                return;
+            }
+            container.innerHTML = `<div class="product-list">${products.map(p => `
+                <div class="product-item">
+                    <div class="product-top">
+                        <div class="product-main">
+                            <h4 class="product-title">${p.name || '未命名商品'}</h4>
+                            <div class="meta">SKU: ${p.sku || 'N/A'} | Code: ${p.code || 'N/A'} | 价格: $${p.price || '0.00'}</div>
+                            ${p.description ? `<div class="meta" style="margin-top:8px;">描述: ${p.description}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('')}</div>`;
+        }
+
+        function renderAiResultsList(results) {
+            const container = document.getElementById('aiResultsList');
+            if (!results || results.length === 0) {
+                container.innerHTML = '<div class="empty-state"><strong>暂无AI结果</strong>点击"加载AI结果"按钮获取数据。</div>';
+                return;
+            }
+            container.innerHTML = `<div class="library-list">${results.map(r => {
+                const product = r.product_info || {};
+                const hasClass = !!r.classification;
+                const hasDesc = !!r.description;
+                const hasRecipe = !!r.recipe;
+                const hasImage = !!r.image_info;
+                return `
+                <div class="library-item">
+                    <h4>${product.name || '未命名商品'}</h4>
+                    <div class="meta">SKU: ${product.sku || 'N/A'} | Code: ${product.code || 'N/A'}</div>
+                    <div class="status-badges">
+                        ${hasClass ? '<span class="badge success">✓ 已分类</span>' : ''}
+                        ${hasDesc ? '<span class="badge success">✓ 已描述</span>' : ''}
+                        ${hasRecipe ? '<span class="badge success">✓ 有食谱</span>' : ''}
+                        ${hasImage ? '<span class="badge success">✓ 有图片提示</span>' : ''}
+                    </div>
+                </div>`;
+            }).join('')}</div>`;
+        }
+
+        function renderRecipeResult(recipe) {
+            const container = document.getElementById('recipeResults');
+            container.innerHTML = `
+                <div class="card" style="margin-top:16px;">
+                    <h3>${recipe.recipe_name || '食谱'}</h3>
+                    ${recipe.recipe_name_en ? `<p class="muted">${recipe.recipe_name_en}</p>` : ''}
+                    <div class="detail-grid" style="margin-top:16px;">
+                        <div class="detail-section">
+                            <h4>基本信息</h4>
+                            <div class="detail-row"><span class="detail-key">菜系</span><span class="detail-value">${recipe.cuisine_type || 'N/A'}</span></div>
+                            <div class="detail-row"><span class="detail-key">难度</span><span class="detail-value">${recipe.difficulty || 'N/A'}</span></div>
+                            <div class="detail-row"><span class="detail-key">准备时间</span><span class="detail-value">${recipe.prep_time || 'N/A'} 分钟</span></div>
+                            <div class="detail-row"><span class="detail-key">烹饪时间</span><span class="detail-value">${recipe.cook_time || 'N/A'} 分钟</span></div>
+                            <div class="detail-row"><span class="detail-key">份数</span><span class="detail-value">${recipe.servings || 'N/A'}</span></div>
+                        </div>
+                        <div class="detail-section">
+                            <h4>食材清单</h4>
+                            ${(recipe.ingredients || []).map(ing => `
+                                <div class="detail-row">
+                                    <span class="detail-key">${ing.item}</span>
+                                    <span class="detail-value">${ing.amount}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="detail-section" style="margin-top:16px;">
+                        <h4>烹饪步骤</h4>
+                        ${(recipe.steps || []).map(step => `
+                            <div class="detail-block">
+                                <strong>步骤 ${step.step}:</strong> ${step.instruction}
+                                ${step.tip ? `<div class="muted-small" style="margin-top:4px;">💡 ${step.tip}</div>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${recipe.tips && recipe.tips.length > 0 ? `
+                        <div class="detail-section" style="margin-top:16px;">
+                            <h4>烹饪技巧</h4>
+                            ${recipe.tips.map(tip => `<div class="muted-small">• ${tip}</div>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderBatchRecipeResults(results) {
+            const container = document.getElementById('recipeResults');
+            const successful = results.filter(r => r.success);
+            container.innerHTML = `<div class="library-list" style="margin-top:16px;">${successful.map(r => `
+                <div class="library-item">
+                    <h4>${r.recipe.recipe_name || '食谱'}</h4>
+                    <div class="meta">商品: ${r.product.name}</div>
+                    <div class="muted-small" style="margin-top:8px;">
+                        ${r.recipe.cuisine_type || ''} | ${r.recipe.difficulty || ''} | 
+                        准备 ${r.recipe.prep_time || 0} 分钟 | 烹饪 ${r.recipe.cook_time || 0} 分钟
+                    </div>
+                </div>
+            `).join('')}</div>`;
+        }
+
+        function renderImagePromptResult(imagePrompt) {
+            const container = document.getElementById('imageResults');
+            container.innerHTML = `
+                <div class="card" style="margin-top:16px;">
+                    <h3>图片生成提示词</h3>
+                    <div class="detail-section" style="margin-top:16px;">
+                        <h4>英文提示词（推荐）</h4>
+                        <div class="detail-value-text" style="background:#f8fbff;padding:12px;border-radius:8px;margin-top:8px;">${imagePrompt.prompt_en || 'N/A'}</div>
+                    </div>
+                    <div class="detail-section" style="margin-top:16px;">
+                        <h4>中文描述</h4>
+                        <div class="detail-value-text" style="background:#f8fbff;padding:12px;border-radius:8px;margin-top:8px;">${imagePrompt.prompt_zh || 'N/A'}</div>
+                    </div>
+                    <div class="detail-grid" style="margin-top:16px;">
+                        <div class="detail-section">
+                            <h4>参数建议</h4>
+                            <div class="detail-row"><span class="detail-key">风格</span><span class="detail-value">${imagePrompt.style || 'N/A'}</span></div>
+                            <div class="detail-row"><span class="detail-key">构图</span><span class="detail-value">${imagePrompt.composition || 'N/A'}</span></div>
+                            <div class="detail-row"><span class="detail-key">光线</span><span class="detail-value">${imagePrompt.lighting || 'N/A'}</span></div>
+                            <div class="detail-row"><span class="detail-key">推荐尺寸</span><span class="detail-value">${imagePrompt.recommended_size || 'N/A'}</span></div>
+                        </div>
+                        <div class="detail-section">
+                            <h4>关键元素</h4>
+                            ${(imagePrompt.key_elements || []).map(el => `<div class="muted-small">• ${el}</div>`).join('')}
+                            ${imagePrompt.color_palette && imagePrompt.color_palette.length > 0 ? `
+                                <div style="margin-top:12px;">
+                                    <strong>色彩:</strong> ${imagePrompt.color_palette.join(', ')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ${imagePrompt.negative_prompt ? `
+                        <div class="detail-section" style="margin-top:16px;">
+                            <h4>负面提示词</h4>
+                            <div class="muted-small">${imagePrompt.negative_prompt}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderBatchImageResults(results) {
+            const container = document.getElementById('imageResults');
+            const successful = results.filter(r => r.success);
+            container.innerHTML = `<div class="library-list" style="margin-top:16px;">${successful.map(r => `
+                <div class="library-item">
+                    <h4>${r.product.name}</h4>
+                    <div class="meta">风格: ${r.image_prompt.style || 'N/A'}</div>
+                    <div class="detail-value-text" style="background:#f8fbff;padding:8px;border-radius:6px;margin-top:8px;font-size:13px;">
+                        ${r.image_prompt.prompt_en ? r.image_prompt.prompt_en.substring(0, 150) + '...' : 'N/A'}
+                    </div>
+                </div>
+            `).join('')}</div>`;
+        }
 
         setDefaultDates();
         renderBatchCenter();
@@ -1442,6 +1882,22 @@ except Exception:
 
 api_handler = None
 data_engine = DataEngine()
+
+# Startup env var check — visible immediately in Cloud Run logs
+logging.basicConfig(level=logging.INFO)
+_startup_logger = logging.getLogger("startup")
+_startup_logger.info("=== StockWise startup env check ===")
+_startup_logger.info("CLOVER_API_KEY present: %s", bool(os.environ.get("CLOVER_API_KEY")))
+_startup_logger.info("MERCHANT_ID present:    %s", bool(os.environ.get("MERCHANT_ID")))
+_startup_logger.info("ANTHROPIC_API_KEY present: %s", bool(os.environ.get("ANTHROPIC_API_KEY")))
+_startup_logger.info("GEMINI_API_KEY present:    %s", bool(os.environ.get("GEMINI_API_KEY")))
+if not os.environ.get("CLOVER_API_KEY") or not os.environ.get("MERCHANT_ID"):
+    _startup_logger.error(
+        "MISSING REQUIRED ENV VARS: CLOVER_API_KEY and/or MERCHANT_ID not set. "
+        "All product/sales API calls will fail. "
+        "Set them via gcloud run deploy --set-env-vars or Cloud Run console."
+    )
+_startup_logger.info("===================================")
 
 
 def get_api_handler():
@@ -1676,6 +2132,8 @@ async def search_sales(
                 "total_revenue": df["销售总额"].str.replace("$", "").str.replace(",", "").astype(float).sum() if not df.empty else 0,
             },
         }
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
     except Exception as e:
@@ -1930,6 +2388,398 @@ async def batch_classify_products(payload: Dict):
         "failed_count": failed_count,
         "total": len(products)
     }
+
+
+# ============================================================================
+# NEW ENDPOINTS - Product Management & Enhanced AI Features
+# ============================================================================
+
+@app.get("/api/products/managed")
+async def get_managed_products(
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    has_description: Optional[bool] = Query(None)
+):
+    """Get all managed products with filters"""
+    try:
+        pm = get_product_manager()
+        filters = {}
+        if search:
+            filters["search"] = search
+        if category:
+            filters["category"] = category
+        if has_description is not None:
+            filters["has_description"] = has_description
+        
+        products = pm.get_all_products(filters)
+        stats = pm.get_statistics()
+        
+        return {
+            "products": products,
+            "count": len(products),
+            "statistics": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/products/save")
+async def save_product(payload: Dict):
+    """Save or update product information"""
+    try:
+        pm = get_product_manager()
+        product = pm.save_product(payload)
+        return {
+            "success": True,
+            "product": product,
+            "message": "Product saved successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/products/{product_key}/field")
+async def update_product_field(product_key: str, payload: Dict):
+    """Update a specific field of a product"""
+    try:
+        field = payload.get("field")
+        value = payload.get("value")
+        
+        if not field:
+            raise HTTPException(status_code=400, detail="Field name is required")
+        
+        pm = get_product_manager()
+        product = pm.update_product_field(product_key, field, value)
+        
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        return {
+            "success": True,
+            "product": product,
+            "message": f"Field '{field}' updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/products/bulk-update")
+async def bulk_update_products(payload: Dict):
+    """Bulk update multiple products"""
+    try:
+        updates = payload.get("updates", [])
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+        
+        pm = get_product_manager()
+        result = pm.bulk_update(updates)
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": f"Bulk update completed: {result['success_count']} succeeded, {result['failed_count']} failed"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/products/export")
+async def export_products(format: str = Query("json", pattern="^(json|csv)$")):
+    """Export all products for external website integration"""
+    try:
+        pm = get_product_manager()
+        export_data = pm.export_products(format)
+        
+        if format == "csv":
+            from fastapi.responses import Response
+            return Response(
+                content=export_data,
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=products_export.csv"}
+            )
+        else:
+            return {
+                "format": format,
+                "data": export_data,
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ai-results")
+async def get_ai_results(
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    has_classification: Optional[bool] = Query(None),
+    has_description: Optional[bool] = Query(None),
+    has_recipe: Optional[bool] = Query(None),
+    has_image: Optional[bool] = Query(None)
+):
+    """Get all AI processing results with filters"""
+    try:
+        store = get_ai_results_store()
+        filters = {}
+        if search:
+            filters["search"] = search
+        if category:
+            filters["category"] = category
+        if has_classification is not None:
+            filters["has_classification"] = has_classification
+        if has_description is not None:
+            filters["has_description"] = has_description
+        if has_recipe is not None:
+            filters["has_recipe"] = has_recipe
+        if has_image is not None:
+            filters["has_image"] = has_image
+        
+        results = store.get_all_results(filters)
+        stats = store.get_statistics()
+        
+        return {
+            "results": results,
+            "count": len(results),
+            "statistics": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai-results/save-classification")
+async def save_ai_classification(payload: Dict):
+    """Save AI classification result to backend storage"""
+    try:
+        product_info = payload.get("product_info", {})
+        classification = payload.get("classification", {})
+        
+        if not product_info or not classification:
+            raise HTTPException(status_code=400, detail="product_info and classification are required")
+        
+        store = get_ai_results_store()
+        result = store.save_classification(product_info, classification)
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": "Classification saved successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai-results/save-description")
+async def save_ai_description(payload: Dict):
+    """Save AI description result to backend storage"""
+    try:
+        product_info = payload.get("product_info", {})
+        description = payload.get("description", {})
+        
+        if not product_info or not description:
+            raise HTTPException(status_code=400, detail="product_info and description are required")
+        
+        store = get_ai_results_store()
+        result = store.save_description(product_info, description)
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": "Description saved successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/ai-results/{product_key}/edit")
+async def edit_ai_result(product_key: str, payload: Dict):
+    """Edit a specific field in an AI result"""
+    try:
+        result_type = payload.get("result_type")
+        field = payload.get("field")
+        value = payload.get("value")
+        
+        if not result_type or not field:
+            raise HTTPException(status_code=400, detail="result_type and field are required")
+        
+        if result_type not in ["classification", "description", "recipe", "image_info"]:
+            raise HTTPException(status_code=400, detail="Invalid result_type")
+        
+        store = get_ai_results_store()
+        result = store.update_result_field(product_key, result_type, field, value)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="AI result not found")
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": f"Field '{field}' in '{result_type}' updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ai-results/export")
+async def export_ai_results(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    result_types: Optional[str] = Query(None)
+):
+    """Export AI results for external website integration"""
+    try:
+        store = get_ai_results_store()
+        types_list = result_types.split(",") if result_types else None
+        export_data = store.export_results(format, types_list)
+        
+        if format == "csv":
+            from fastapi.responses import Response
+            return Response(
+                content=export_data,
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=ai_results_export.csv"}
+            )
+        else:
+            return {
+                "format": format,
+                "data": export_data,
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/recipe")
+async def generate_recipe(payload: Dict):
+    """Generate recipe recommendation for a product"""
+    try:
+        product_info = payload.get("product_info", {})
+        recipe_type = payload.get("recipe_type", "simple")
+        
+        if not product_info or not product_info.get("name"):
+            raise HTTPException(status_code=400, detail="product_info with name is required")
+        
+        engine = get_ai_enhancements_engine()
+        recipe = engine.generate_recipe(product_info, recipe_type)
+        
+        # Save to AI results store
+        store = get_ai_results_store()
+        store.save_recipe(product_info, recipe)
+        
+        return {
+            "success": True,
+            "recipe": recipe,
+            "message": "Recipe generated and saved successfully"
+        }
+    except Exception as e:
+        logger.error(f"Recipe generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/image-prompt")
+async def generate_image_prompt(payload: Dict):
+    """Generate image prompt for product visualization"""
+    try:
+        product_info = payload.get("product_info", {})
+        style = payload.get("style", "realistic")
+        
+        if not product_info or not product_info.get("name"):
+            raise HTTPException(status_code=400, detail="product_info with name is required")
+        
+        engine = get_ai_enhancements_engine()
+        image_prompt = engine.generate_image_prompt(product_info, style)
+        
+        # Save to AI results store
+        store = get_ai_results_store()
+        store.save_image_info(product_info, image_prompt)
+        
+        return {
+            "success": True,
+            "image_prompt": image_prompt,
+            "message": "Image prompt generated and saved successfully"
+        }
+    except Exception as e:
+        logger.error(f"Image prompt generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/batch-recipe")
+async def batch_generate_recipes(payload: Dict):
+    """Batch generate recipes for multiple products"""
+    try:
+        products = payload.get("products", [])
+        recipe_type = payload.get("recipe_type", "simple")
+        
+        if not products:
+            raise HTTPException(status_code=400, detail="No products provided")
+        
+        engine = get_ai_enhancements_engine()
+        result = engine.batch_generate_recipes(products, recipe_type)
+        
+        # Save successful results to store
+        store = get_ai_results_store()
+        for item in result["results"]:
+            if item["success"]:
+                store.save_recipe(item["product"], item["recipe"])
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": f"Batch recipe generation completed: {result['success_count']} succeeded, {result['failed_count']} failed"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/batch-image-prompt")
+async def batch_generate_image_prompts(payload: Dict):
+    """Batch generate image prompts for multiple products"""
+    try:
+        products = payload.get("products", [])
+        style = payload.get("style", "realistic")
+        
+        if not products:
+            raise HTTPException(status_code=400, detail="No products provided")
+        
+        engine = get_ai_enhancements_engine()
+        result = engine.batch_generate_image_prompts(products, style)
+        
+        # Save successful results to store
+        store = get_ai_results_store()
+        for item in result["results"]:
+            if item["success"]:
+                store.save_image_info(item["product"], item["image_prompt"])
+        
+        return {
+            "success": True,
+            "result": result,
+            "message": f"Batch image prompt generation completed: {result['success_count']} succeeded, {result['failed_count']} failed"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/products/merged")
+async def get_products_with_ai_results():
+    """Get products merged with AI results for complete data export"""
+    try:
+        api = get_api_handler()
+        inventory = api.fetch_full_inventory()
+        
+        if not inventory:
+            raise HTTPException(status_code=404, detail="No products found")
+        
+        store = get_ai_results_store()
+        merged = store.merge_with_products(inventory)
+        
+        return {
+            "products": merged,
+            "count": len(merged),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

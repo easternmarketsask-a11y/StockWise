@@ -7,4 +7,4 @@ COPY . .
 EXPOSE 8080
 ENV PORT=8080
 ENV PYTHONPATH=/app
-CMD ["uvicorn", "app_server:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
+CMD ["uvicorn", "app_server:app", "--host", "0.0.0.0", "--port", "8080"]

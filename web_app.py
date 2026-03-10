@@ -189,7 +189,7 @@ def generate_ai_json(prompt: str) -> Dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return f'''<!DOCTYPE html>
+    return '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -379,7 +379,7 @@ async def root():
 
         function renderMetrics(id, items) {
             const container = document.getElementById(id);
-            container.innerHTML = items.map(item => `<div class="metric"><div class="k">${{item.label}}</div><div class="v">${{item.value}}</div></div>`).join('');
+            container.innerHTML = items.map(item => `<div class="metric"><div class="k">${item.label}</div><div class="v">${item.value}</div></div>`).join('');
         }
 
         function renderTable(containerId, rows) {
@@ -389,7 +389,7 @@ async def root():
                 return;
             }
             const headers = Object.keys(rows[0]);
-            container.innerHTML = `<table><thead><tr>${{headers.map(h => `<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(row => `<tr>${{headers.map(h => `<td>${{row[h] ?? ''}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>`;
+            container.innerHTML = `<table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${headers.map(h => `<td>${row[h] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
         }
 
         async function requestJson(url, options) {
@@ -409,7 +409,7 @@ async def root():
             if (revenueChart) revenueChart.destroy();
             qtyChart = new Chart(document.getElementById('qtyChart'), { type: 'bar', data: { labels, datasets: [{ label: '销量', data: qtyData, backgroundColor: '#1e63d2' }] }, options: { responsive: true, plugins: { legend: { display: false } } } });
             revenueChart = new Chart(document.getElementById('revenueChart'), { type: 'doughnut', data: { labels, datasets: [{ label: '销售额', data: revenueData, backgroundColor: ['#1e63d2','#4f8df0','#7aacff','#99bfff','#bfd7ff','#dce9ff'] }] }, options: { responsive: true } });
-            setStatus('chartStatus', `已根据最近查询结果绘制 ${{rows.length}} 个商品的图表。`, 'success');
+            setStatus('chartStatus', `已根据最近查询结果绘制 ${rows.length} 个商品的图表。`, 'success');
         }
 
         document.getElementById('searchButton').addEventListener('click', async () => {
@@ -419,7 +419,7 @@ async def root():
             if (!query) { setStatus('salesStatus', '请输入搜索关键词。', 'error'); return; }
             setStatus('salesStatus', '正在查询...');
             try {
-                const data = await requestJson(`/api/sales/search?query=${{encodeURIComponent(query)}}&start_date=${{startDate}}&end_date=${{endDate}}`);
+                const data = await requestJson(`/api/sales/search?query=${encodeURIComponent(query)}&start_date=${startDate}&end_date=${endDate}`);
                 state.lastQueryResults = data.results || [];
                 renderMetrics('salesMetrics', [
                     { label: '匹配商品', value: data.matched_products },
@@ -428,7 +428,7 @@ async def root():
                     { label: '总销售额', value: '$' + Number(data.summary.total_revenue || 0).toFixed(2) },
                 ]);
                 renderTable('salesResults', state.lastQueryResults);
-                setStatus('salesStatus', `查询成功：${{data.period}}`, 'success');
+                setStatus('salesStatus', `查询成功：${data.period}`, 'success');
                 if (state.lastQueryResults.length) drawCharts(state.lastQueryResults);
             } catch (error) {
                 renderMetrics('salesMetrics', []);
@@ -444,7 +444,7 @@ async def root():
                 const rows = data.data || [];
                 if (!rows.length) { setStatus('salesStatus', '近 30 天没有销售记录。', 'error'); return; }
                 const headers = Object.keys(rows[0]);
-                const csv = [headers.join(','), ...rows.map(row => headers.map(h => `"${{String(row[h] ?? '').replaceAll('"','""')}}"`).join(','))].join('\n');
+                const csv = [headers.join(','), ...rows.map(row => headers.map(h => `"${String(row[h] ?? '').replaceAll('"','""')}"`).join(','))].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
@@ -480,9 +480,9 @@ async def root():
             const endDate = document.getElementById('trendEndDate').value;
             setStatus('trendStatus', '正在分析趋势...');
             try {
-                const params = new URLSearchParams({{ period, start_date: startDate, end_date: endDate }});
+                const params = new URLSearchParams({ period, start_date: startDate, end_date: endDate });
                 if (query) params.set('query', query);
-                const data = await requestJson(`/api/trends/analysis?${{params.toString()}}`);
+                const data = await requestJson(`/api/trends/analysis?${params.toString()}`);
                 renderMetrics('trendMetrics', [
                     { label: '本期销量', value: data.current_period.quantity },
                     { label: '本期销售额', value: '$' + Number(data.current_period.revenue).toFixed(2) },
@@ -494,7 +494,7 @@ async def root():
                     { 指标: '销售额', 本期: '$' + Number(data.current_period.revenue).toFixed(2), 上期: '$' + Number(data.previous_period.revenue).toFixed(2), 增长率: data.growth.revenue === null ? '∞' : data.growth.revenue + '%' },
                     { 指标: '订单数', 本期: data.current_period.orders, 上期: data.previous_period.orders, 增长率: data.growth.orders === null ? '∞' : data.growth.orders + '%' },
                 ]);
-                setStatus('trendStatus', `趋势分析完成：${{data.comparison_type === 'mom' ? '月环比' : '年同比'}}`, 'success');
+                setStatus('trendStatus', `趋势分析完成：${data.comparison_type === 'mom' ? '月环比' : '年同比'}`, 'success');
             } catch (error) {
                 setStatus('trendStatus', error.message, 'error');
             }
