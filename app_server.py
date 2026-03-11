@@ -17,6 +17,15 @@ from product_manager import get_product_manager
 from ai_results_store import get_ai_results_store
 from ai_enhancements import get_ai_enhancements_engine
 
+# Firebase integration (optional - will gracefully fail if not configured)
+try:
+    from firebase_api_endpoints import firebase_router
+    FIREBASE_ENABLED = True
+except Exception as e:
+    FIREBASE_ENABLED = False
+    firebase_router = None
+    logging.warning(f"Firebase not available: {e}")
+
 logger = logging.getLogger(__name__)
 
 HTML_PAGE = r'''<!DOCTYPE html>
@@ -132,6 +141,65 @@ HTML_PAGE = r'''<!DOCTYPE html>
         .empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
         .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
         .footer { text-align: center; padding: 20px; color: #64748b; font-size: 14px; }
+        /* === Catalog Management === */
+        .catalog-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid #edf2fa; margin-bottom: 12px; }
+        .catalog-toolbar input, .catalog-toolbar select { flex: 1; min-width: 150px; padding: 10px 12px; border-radius: 12px; border: 1px solid #d3ddec; font-size: 13px; }
+        .catalog-stats-bar { font-size: 13px; color: #64748b; padding: 4px 0 10px; display: flex; gap: 20px; flex-wrap: wrap; }
+        .catalog-stats-bar strong { color: #162033; }
+        .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-top: 8px; }
+        .catalog-card { background: #fff; border: 1px solid #e5edf9; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(19,45,89,.04); transition: box-shadow .2s, transform .15s; cursor: pointer; }
+        .catalog-card:hover { box-shadow: 0 8px 24px rgba(30,99,210,.10); transform: translateY(-2px); }
+        .catalog-img-wrap { width: 100%; height: 130px; background: #f7faff; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #eef2fa; overflow: hidden; }
+        .catalog-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+        .catalog-img-icon { font-size: 42px; opacity: .15; }
+        .catalog-body { padding: 11px 13px; }
+        .catalog-name { font-size: 13px; font-weight: 700; color: #162033; margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .catalog-price { font-size: 16px; font-weight: 800; color: #1e63d2; margin: 3px 0; }
+        .catalog-sku { font-size: 11px; color: #94a3b8; }
+        .catalog-badges-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+        .bdg { padding: 3px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .bdg-blue { background: #eef4ff; color: #214a94; }
+        .bdg-green { background: #e9f8ef; color: #2e7d32; }
+        .bdg-orange { background: #fff4e5; color: #b26b00; }
+        .catalog-footer { padding: 9px 12px; border-top: 1px solid #eef2fa; }
+        .btn-edit-prod { width: 100%; padding: 8px; background: #f8fbff; border: 1px solid #d8e3f7; color: #214a94; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all .15s; }
+        .btn-edit-prod:hover { background: #1e63d2; color: #fff; border-color: #1e63d2; }
+        .pub-api-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 14px 16px; margin-top: 20px; }
+        .pub-api-box h4 { font-size: 13px; font-weight: 700; color: #0369a1; margin: 0 0 8px; }
+        .pub-api-box code { background: #e0f2fe; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #0369a1; display: inline-block; margin: 2px 0; }
+        /* === Product Detail Modal === */
+        .prod-modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.52); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .prod-modal-overlay.hidden { display: none; }
+        .prod-modal { background: #fff; border-radius: 20px; width: 100%; max-width: 880px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 32px 80px rgba(15,23,42,.22); }
+        .prod-modal-head { padding: 18px 22px 14px; border-bottom: 1px solid #edf2fa; display: flex; align-items: flex-start; gap: 14px; flex-shrink: 0; }
+        .prod-modal-head-info { flex: 1; min-width: 0; }
+        .prod-modal-title { font-size: 17px; font-weight: 700; color: #162033; margin: 0 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .prod-modal-sub { font-size: 12px; color: #64748b; margin: 0; }
+        .btn-close-modal { background: #f2f5fa; border: 0; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; color: #42526b; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s; }
+        .btn-close-modal:hover { background: #fee2e2; color: #b42318; }
+        .prod-modal-tabs { display: flex; gap: 2px; padding: 0 22px; background: #fafcff; border-bottom: 1px solid #edf2fa; flex-shrink: 0; overflow-x: auto; }
+        .prod-modal-tab { padding: 10px 14px; background: transparent; border: 0; border-bottom: 3px solid transparent; cursor: pointer; font-size: 13px; font-weight: 600; color: #64748b; transition: all .15s; white-space: nowrap; }
+        .prod-modal-tab.active { color: #1e63d2; border-bottom-color: #1e63d2; }
+        .prod-modal-tab:hover { color: #1e63d2; }
+        .prod-modal-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+        .prod-modal-footer { padding: 12px 22px; border-top: 1px solid #edf2fa; display: flex; gap: 10px; align-items: center; background: #fafcff; border-radius: 0 0 20px 20px; flex-shrink: 0; }
+        .prod-modal-footer .mflex { flex: 1; font-size: 13px; }
+        .fgrp { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+        .fgrp label { font-size: 11px; font-weight: 700; color: #4f5f78; text-transform: uppercase; letter-spacing: .06em; }
+        .fgrp input, .fgrp select, .fgrp textarea { padding: 9px 11px; border: 1px solid #d3ddec; border-radius: 10px; font-size: 13px; color: #162033; width: 100%; resize: vertical; font-family: inherit; background: #fff; }
+        .fgrp input:focus, .fgrp select:focus, .fgrp textarea:focus { outline: none; border-color: #8eb4f3; box-shadow: 0 0 0 3px rgba(30,99,210,.08); }
+        .fgrp .readonly { background: #f7faff !important; color: #64748b !important; }
+        .fgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .fgrid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .sec-head { font-size: 13px; font-weight: 700; color: #42526b; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #edf2fa; display: flex; align-items: center; gap: 8px; }
+        .sec-head:first-child { margin-top: 0; }
+        .clover-tag { font-size: 11px; background: #f2f7ff; color: #7a879b; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+        .img-preview-area { width: 100%; height: 170px; background: #f7faff; border: 2px dashed #d3ddec; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; overflow: hidden; transition: border-color .2s; }
+        .img-preview-area img { width: 100%; height: 100%; object-fit: contain; }
+        .img-no-img { text-align: center; color: #94a3b8; }
+        .img-no-img span { font-size: 44px; display: block; opacity: .3; }
+        .ai-block { background: #f8fbff; border: 1px solid #dbe7f8; border-radius: 12px; padding: 13px; margin-top: 10px; }
+        .ai-block h5 { font-size: 13px; font-weight: 700; color: #214a94; margin: 0 0 10px; }
         @media (max-width: 900px) { .container { flex-direction: column; } .sidebar { width: 100%; } .sidebar-shell { position: static; padding: 14px; } .tabs { flex-direction: row; flex-wrap: wrap; } .tab-button { flex: 1 1 auto; text-align: center; } .cards, .grid-2, .grid-3, .metrics, .hero, .search-layout, .detail-grid { grid-template-columns: 1fr; } .header-inner { flex-direction: column; align-items: flex-start; } .header { padding: 16px 18px; } .header-badge, .panel-meta { display: none; } .panel-header { padding-bottom: 12px; margin-bottom: 16px; } .product-top { flex-direction: column; } .product-actions { width: 100%; } .two-column-actions { grid-template-columns: 1fr 1fr; } }
     </style>
 </head>
@@ -162,6 +230,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
                     <button class="tab-button" data-tab="management">🛠️ 商品管理</button>
                     <button class="tab-button" data-tab="batch">⚙️ 批量处理</button>
                     <button class="tab-button" data-tab="analytics">📊 数据分析</button>
+                    <button class="tab-button" data-tab="firebase">🔥 Firebase</button>
                 </section>
             </div>
         </aside>
@@ -254,14 +323,38 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <button class="chip" data-subtab="image-gen">🖼️ 图片提示词</button>
             </div>
             <div id="products-mgmt-panel" class="subtab-panel">
-                <div class="actions">
-                    <button class="btn" id="loadProductsButton">加载商品列表</button>
-                    <button class="btn secondary" id="exportProductsButton">导出商品数据</button>
-                    <button class="btn secondary" id="exportMergedButton">导出完整数据</button>
+                <div class="catalog-toolbar">
+                    <button class="btn" id="loadProductsButton">🔄 同步Clover商品</button>
+                    <input id="catalogSearch" placeholder="搜索商品名称 / SKU / 条码...">
+                    <select id="catalogCategoryFilter"><option value="">全部分类</option></select>
+                    <select id="catalogStatusFilter">
+                        <option value="">全部状态</option>
+                        <option value="complete">资料已完善</option>
+                        <option value="pending">待完善资料</option>
+                    </select>
+                    <button class="btn secondary" id="exportProductsButton">📥 导出JSON</button>
+                    <button class="btn secondary" id="exportMergedButton">📦 导出完整</button>
                 </div>
                 <div id="productMgmtStatus" class="status"></div>
-                <div id="productMgmtMetrics" class="metrics"></div>
-                <div id="productsList"></div>
+                <div id="catalogStatsBar" class="catalog-stats-bar" style="display:none;"></div>
+                <div id="productMgmtMetrics" class="metrics" style="display:none;"></div>
+                <div id="productsList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🛒</div>
+                        <strong>点击"同步Clover商品"加载完整商品目录</strong>
+                        <p class="muted-small" style="margin-top:8px;">系统将从Clover POS拉取全部商品，并合并本地编辑与AI处理结果</p>
+                    </div>
+                </div>
+                <div class="pub-api-box">
+                    <h4>🌐 超市网页公共调用API</h4>
+                    <p class="muted-small">以下端点可供超市网站按需调用商品信息（含AI数据，无需鉴权）：</p>
+                    <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
+                        <div><code>/api/public/products</code> — 全部商品列表（含本地编辑+AI数据）</div>
+                        <div><code>/api/public/products/{id}</code> — 单个商品完整详情</div>
+                        <div><code>/api/public/products?category=蔬菜</code> — 按分类筛选</div>
+                        <div><code>/api/public/products?search=苹果&amp;limit=20</code> — 关键词搜索+分页</div>
+                    </div>
+                </div>
             </div>
             <div id="ai-results-mgmt-panel" class="subtab-panel" style="display:none;">
                 <div class="actions">
@@ -378,6 +471,75 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <div class="status" id="chartVisStatus">请先在销量查询中完成一次搜索。</div>
             </div>
         </section>
+        <section id="firebase" class="tab-panel card">
+            <div class="panel-header">
+                <div class="panel-copy">
+                    <div class="panel-kicker">Firebase Cloud Storage</div>
+                    <h2 class="panel-title">🔥 Firebase 商品管理</h2>
+                    <p class="muted">基于 Firestore 和 Cloud Storage 的现代化商品管理系统，支持图片上传和实时数据同步。</p>
+                </div>
+                <div class="panel-meta">存储 · 同步 · 管理</div>
+            </div>
+            <div class="tabs" style="flex-direction: row; margin-bottom: 20px;">
+                <button class="chip active" data-subtab="firebase-products">📦 商品列表</button>
+                <button class="chip" data-subtab="firebase-create">➕ 创建商品</button>
+                <button class="chip" data-subtab="firebase-sync">🔄 数据同步</button>
+                <button class="chip" data-subtab="firebase-stats">📊 统计信息</button>
+            </div>
+            <div id="firebase-products-panel" class="subtab-panel">
+                <div class="grid-2">
+                    <div><label for="firebaseSearch">搜索商品</label><input id="firebaseSearch" placeholder="输入商品名称、SKU或编码"></div>
+                    <div><label for="firebaseCategory">分类筛选</label><select id="firebaseCategory"><option value="">全部分类</option></select></div>
+                </div>
+                <div class="actions">
+                    <button class="btn" id="firebaseSearchButton">🔍 搜索</button>
+                    <button class="btn secondary" id="firebaseLoadAllButton">📋 加载全部</button>
+                    <button class="btn secondary" id="firebaseExportButton">💾 导出数据</button>
+                </div>
+                <div id="firebaseStatus" class="status"></div>
+                <div id="firebaseResults"></div>
+            </div>
+            <div id="firebase-create-panel" class="subtab-panel" style="display:none;">
+                <form id="firebaseCreateForm">
+                    <div class="grid-2">
+                        <div><label for="firebaseName">商品名称 *</label><input id="firebaseName" required></div>
+                        <div><label for="firebasePrice">价格 *</label><input id="firebasePrice" type="number" step="0.01" required></div>
+                    </div>
+                    <div class="grid-2">
+                        <div><label for="firebaseSku">SKU</label><input id="firebaseSku"></div>
+                        <div><label for="firebaseCode">条码</label><input id="firebaseCode"></div>
+                    </div>
+                    <div class="grid-2">
+                        <div><label for="firebaseCategory">分类</label><input id="firebaseCategoryCreate"></div>
+                        <div><label for="firebaseStock">库存数量</label><input id="firebaseStock" type="number" value="0"></div>
+                    </div>
+                    <div><label for="firebaseDescription">商品描述</label><textarea id="firebaseDescription" rows="3"></textarea></div>
+                    <div><label for="firebaseImage">商品图片</label><input id="firebaseImage" type="file" accept="image/*"></div>
+                    <div class="actions">
+                        <button class="btn" type="submit">➕ 创建商品</button>
+                        <button class="btn secondary" type="reset">🔄 重置表单</button>
+                    </div>
+                </form>
+                <div id="firebaseCreateStatus" class="status"></div>
+            </div>
+            <div id="firebase-sync-panel" class="subtab-panel" style="display:none;">
+                <div class="card">
+                    <h3>🔄 Clover 数据同步</h3>
+                    <p class="muted">从 Clover POS API 同步商品数据到 Firebase Firestore。</p>
+                    <div class="actions">
+                        <button class="btn" id="firebaseSyncButton">🚀 开始同步</button>
+                        <button class="btn secondary" id="firebaseSyncOverwriteButton">🔄 强制覆盖同步</button>
+                    </div>
+                    <div id="firebaseSyncStatus" class="status"></div>
+                    <div id="firebaseSyncResults"></div>
+                </div>
+            </div>
+            <div id="firebase-stats-panel" class="subtab-panel" style="display:none;">
+                <div class="actions"><button class="btn" id="firebaseStatsButton">📊 刷新统计</button></div>
+                <div id="firebaseStatsStatus" class="status"></div>
+                <div id="firebaseStatsResults"></div>
+            </div>
+        </section>
         <section class="cards" style="margin-top: 30px;">
             <div class="card"><div class="label">待分类商品</div><div class="value" id="pendingClassifyCount">0</div></div>
             <div class="card"><div class="label">待描述商品</div><div class="value" id="pendingDescribeCount">0</div></div>
@@ -387,6 +549,31 @@ HTML_PAGE = r'''<!DOCTYPE html>
         </div>
     </main>
     <div class="footer">Copyright 2026 EasternMarket. All rights reserved.</div>
+
+    <!-- ===== Product Detail Modal ===== -->
+    <div id="prodModalOverlay" class="prod-modal-overlay hidden">
+        <div class="prod-modal" role="dialog" aria-modal="true">
+            <div class="prod-modal-head">
+                <div class="prod-modal-head-info">
+                    <h2 class="prod-modal-title" id="prodModalTitle">商品详情</h2>
+                    <p class="prod-modal-sub" id="prodModalSub">SKU: — | Code: — | Clover ID: —</p>
+                </div>
+                <button class="btn-close-modal" id="prodModalClose" title="关闭">✕</button>
+            </div>
+            <div class="prod-modal-tabs">
+                <button class="prod-modal-tab active" data-modal-tab="basic">📋 基本信息</button>
+                <button class="prod-modal-tab" data-modal-tab="images">🖼️ 图片管理</button>
+                <button class="prod-modal-tab" data-modal-tab="detail">📝 描述与标签</button>
+                <button class="prod-modal-tab" data-modal-tab="ai">🤖 AI 数据</button>
+            </div>
+            <div class="prod-modal-body" id="prodModalBody"></div>
+            <div class="prod-modal-footer">
+                <div class="mflex" id="prodModalSaveStatus"></div>
+                <button class="btn secondary" id="prodModalCancel">取消</button>
+                <button class="btn" id="prodModalSave">💾 保存本地（不写入Clover）</button>
+            </div>
+        </div>
+    </div>
     <script>
         const tabs = document.querySelectorAll('.tab-button');
         const panels = document.querySelectorAll('.tab-panel');
@@ -427,6 +614,10 @@ HTML_PAGE = r'''<!DOCTYPE html>
         };
         let qtyChart = null;
         let revenueChart = null;
+        // === Catalog management state ===
+        let catalogAll = [];
+        let catalogFiltered = [];
+        let modalProduct = null;
 
         function setDefaultDates() {
             const today = new Date();
@@ -528,6 +719,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
             panels.forEach(panel => panel.classList.toggle('active', panel.id === tabId));
             if (tabId === 'batch') renderBatchCenter();
             if (tabId === 'analytics') renderLibrary();
+            if (tabId === 'firebase') initFirebaseTab();
         }
 
         function toId(value) {
@@ -546,6 +738,50 @@ HTML_PAGE = r'''<!DOCTYPE html>
         function hasLibraryRecord(product, type) {
             const key = getProductKey(product);
             return state.aiLibrary.some(item => item.type === type && item.key === key);
+        }
+        
+        async function hasCloudAIResult(product, resultType) {
+            try {
+                const response = await fetch(`/api/firebase/ai/results?product=${encodeURIComponent(JSON.stringify(product))}&result_type=${resultType}`);
+                const data = await response.json();
+                return data.success && data.result !== null;
+            } catch (error) {
+                console.warn('Error checking cloud AI result:', error);
+                return false;
+            }
+        }
+        
+        async function syncAIResultsFromCloud() {
+            try {
+                const response = await fetch('/api/firebase/ai/results/all?limit=100');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Merge cloud results with local library
+                    data.results.forEach(cloudResult => {
+                        const key = cloudResult.product_key;
+                        const existingLocal = state.aiLibrary.find(item => 
+                            item.type === cloudResult.result_type && item.key === key
+                        );
+                        
+                        if (!existingLocal) {
+                            // Add cloud result to local library if not exists
+                            state.aiLibrary.unshift({
+                                type: cloudResult.result_type,
+                                key: key,
+                                product: cloudResult.product_data,
+                                result: cloudResult.result,
+                                createdAt: cloudResult.created_at,
+                            });
+                        }
+                    });
+                    
+                    saveToStorage(STORAGE_KEYS.AI_LIBRARY, state.aiLibrary);
+                    console.log(`Synced ${data.results.length} AI results from cloud`);
+                }
+            } catch (error) {
+                console.warn('Error syncing AI results from cloud:', error);
+            }
         }
 
         function matchesSearchMode(product, query, mode) {
@@ -764,6 +1000,31 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 createdAt: new Date().toISOString(),
             });
             saveToStorage(STORAGE_KEYS.AI_LIBRARY, state.aiLibrary);
+            
+            // Also save to Firebase for cloud sync
+            saveAIResultToFirebase(product, type, payload);
+        }
+        
+        async function saveAIResultToFirebase(product, resultType, resultData) {
+            try {
+                const response = await fetch('/api/firebase/ai/results/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        product: product,
+                        result_type: resultType,
+                        result_data: resultData
+                    })
+                });
+                
+                if (!response.ok) {
+                    console.warn('Failed to save AI result to Firebase:', await response.text());
+                }
+            } catch (error) {
+                console.warn('Error saving AI result to Firebase:', error);
+            }
         }
 
         function renderAiWorkspace(type, data) {
@@ -1491,23 +1752,104 @@ HTML_PAGE = r'''<!DOCTYPE html>
         // NEW FEATURE HANDLERS - Product Management & Enhanced AI
         // ============================================================================
 
-        // Product Management Tab Handlers
-        document.getElementById('loadProductsButton').addEventListener('click', async () => {
-            setStatus('productMgmtStatus', '正在加载商品数据...', 'info');
+        // === CATALOG MANAGEMENT TAB HANDLERS ===
+        document.getElementById('loadProductsButton').addEventListener('click', async function() {
+            setStatus('productMgmtStatus', '🔄 正在从 Clover POS 同步商品目录，请稍候...', 'info');
+            this.disabled = true;
             try {
-                const data = await requestJson('/api/products/managed');
-                setStatus('productMgmtStatus', `成功加载 ${data.count} 个商品`, 'success');
-                renderMetrics('productMgmtMetrics', [
-                    { label: '总商品数', value: data.statistics.total_products },
-                    { label: '有描述', value: data.statistics.with_description },
-                    { label: '有分类', value: data.statistics.with_category },
-                    { label: '完成度', value: data.statistics.completion_rate + '%' }
-                ]);
-                renderProductsList(data.products);
+                const data = await requestJson('/api/products/catalog');
+                catalogAll = data.products || [];
+                catalogFiltered = [...catalogAll];
+                const catSel = document.getElementById('catalogCategoryFilter');
+                catSel.innerHTML = '<option value="">全部分类</option>';
+                (data.categories || []).forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat; opt.textContent = cat;
+                    catSel.appendChild(opt);
+                });
+                setStatus('productMgmtStatus', '✅ 已同步 ' + catalogAll.length + ' 个商品（来自 Clover POS）', 'success');
+                renderCatalogGrid();
             } catch (error) {
-                setStatus('productMgmtStatus', error.message, 'error');
+                setStatus('productMgmtStatus', '❌ ' + error.message, 'error');
+            } finally {
+                this.disabled = false;
             }
         });
+
+        document.getElementById('catalogSearch').addEventListener('input', filterCatalog);
+        document.getElementById('catalogCategoryFilter').addEventListener('change', filterCatalog);
+        document.getElementById('catalogStatusFilter').addEventListener('change', filterCatalog);
+
+        document.getElementById('productsList').addEventListener('click', function(e) {
+            const target = e.target.closest('[data-product-id]');
+            if (target) openProductModal(target.dataset.productId);
+        });
+
+        function filterCatalog() {
+            const search = (document.getElementById('catalogSearch').value || '').toLowerCase();
+            const cat = document.getElementById('catalogCategoryFilter').value;
+            const status = document.getElementById('catalogStatusFilter').value;
+            catalogFiltered = catalogAll.filter(p => {
+                if (search) {
+                    const name = (p.display_name || p.name || '').toLowerCase();
+                    if (!name.includes(search) && !(p.sku||'').toLowerCase().includes(search) && !(p.code||'').toLowerCase().includes(search)) return false;
+                }
+                if (cat) {
+                    const pcat = p.category || (p.ai_classification && p.ai_classification.main_category) || '';
+                    if (pcat !== cat) return false;
+                }
+                if (status) {
+                    const hasDesc = !!(p.description || (p.ai_description && p.ai_description.description));
+                    if (status === 'complete' && !hasDesc) return false;
+                    if (status === 'pending' && hasDesc) return false;
+                }
+                return true;
+            });
+            renderCatalogGrid();
+        }
+
+        function renderCatalogGrid() {
+            const container = document.getElementById('productsList');
+            const statsBar = document.getElementById('catalogStatsBar');
+            if (!catalogFiltered.length) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><strong>没有匹配的商品</strong></div>';
+                statsBar.style.display = 'none';
+                return;
+            }
+            statsBar.style.display = 'flex';
+            const withImg = catalogFiltered.filter(p => p.image_url).length;
+            const withDesc = catalogFiltered.filter(p => p.description || (p.ai_description && p.ai_description.description)).length;
+            const withAI = catalogFiltered.filter(p => p.ai_classification || p.ai_description).length;
+            statsBar.innerHTML = '显示 <strong>' + catalogFiltered.length + '</strong> / 共 <strong>' + catalogAll.length + '</strong> 个商品 &nbsp;|&nbsp; 🖼️ 有图片 <strong>' + withImg + '</strong> &nbsp;|&nbsp; 📝 有描述 <strong>' + withDesc + '</strong> &nbsp;|&nbsp; 🤖 AI处理 <strong>' + withAI + '</strong>';
+            const cards = catalogFiltered.map(p => {
+                const name = escHtml(p.display_name || p.name || '未命名商品');
+                const price = p.price != null ? '$' + Number(p.price).toFixed(2) : '—';
+                const cat = p.category || (p.ai_classification && p.ai_classification.main_category) || '';
+                const hasDesc = !!(p.description || (p.ai_description && p.ai_description.description));
+                const hasAI = !!(p.ai_classification || p.ai_description);
+                const hasImg = !!p.image_url;
+                const pid = escHtml(p.id || '');
+                const imgHtml = hasImg
+                    ? '<img src="' + escHtml(p.image_url) + '" alt="' + name + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'<div class=catalog-img-icon>🛒</div>\'">'
+                    : '<div class="catalog-img-icon">🛒</div>';
+                return '<div class="catalog-card" data-product-id="' + pid + '">' +
+                    '<div class="catalog-img-wrap">' + imgHtml + '</div>' +
+                    '<div class="catalog-body">' +
+                        '<div class="catalog-name" title="' + name + '">' + name + '</div>' +
+                        '<div class="catalog-price">' + price + '</div>' +
+                        '<div class="catalog-sku">SKU: ' + escHtml(p.sku || '—') + ' | ' + escHtml(p.code || '—') + '</div>' +
+                        '<div class="catalog-badges-row">' +
+                            (cat ? '<span class="bdg bdg-blue">' + escHtml(cat) + '</span>' : '') +
+                            (hasDesc ? '<span class="bdg bdg-green">✓ 描述</span>' : '') +
+                            (hasAI ? '<span class="bdg bdg-orange">✓ AI</span>' : '') +
+                            (hasImg ? '<span class="bdg bdg-green">✓ 图片</span>' : '') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="catalog-footer"><button class="btn-edit-prod" data-product-id="' + pid + '">✏️ 编辑详情</button></div>' +
+                '</div>';
+            }).join('');
+            container.innerHTML = '<div class="catalog-grid">' + cards + '</div>';
+        }
 
         document.getElementById('exportProductsButton').addEventListener('click', async () => {
             try {
@@ -1689,24 +2031,236 @@ HTML_PAGE = r'''<!DOCTYPE html>
         });
 
         // Render Functions for New Features
-        function renderProductsList(products) {
-            const container = document.getElementById('productsList');
-            if (!products || products.length === 0) {
-                container.innerHTML = '<div class="empty-state"><strong>暂无商品数据</strong>点击"加载商品列表"按钮获取数据。</div>';
-                return;
-            }
-            container.innerHTML = `<div class="product-list">${products.map(p => `
-                <div class="product-item">
-                    <div class="product-top">
-                        <div class="product-main">
-                            <h4 class="product-title">${p.name || '未命名商品'}</h4>
-                            <div class="meta">SKU: ${p.sku || 'N/A'} | Code: ${p.code || 'N/A'} | 价格: $${p.price || '0.00'}</div>
-                            ${p.description ? `<div class="meta" style="margin-top:8px;">描述: ${p.description}</div>` : ''}
-                        </div>
-                    </div>
-                </div>
-            `).join('')}</div>`;
+        // renderProductsList is superseded by renderCatalogGrid (catalog management)
+        function renderProductsList(products) { renderCatalogGrid(); }
+
+        // ==============================
+        // PRODUCT DETAIL MODAL
+        // ==============================
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
+
+        function openProductModal(productId) {
+            const p = catalogAll.find(x => x.id === productId);
+            if (!p) return;
+            modalProduct = p;
+            document.getElementById('prodModalTitle').textContent = p.display_name || p.name || 'Product Detail';
+            document.getElementById('prodModalSub').textContent =
+                'SKU: ' + (p.sku || '-') + '  |  Code: ' + (p.code || '-') + '  |  ID: ' + (p.id || '-') + '  |  Clover Price: $' + Number(p.price || 0).toFixed(2);
+            document.getElementById('prodModalSaveStatus').textContent = '';
+            document.querySelectorAll('.prod-modal-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector('[data-modal-tab="basic"]').classList.add('active');
+            renderModalTab('basic');
+            document.getElementById('prodModalOverlay').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeProductModal() {
+            document.getElementById('prodModalOverlay').classList.add('hidden');
+            document.body.style.overflow = '';
+            modalProduct = null;
+        }
+
+        document.getElementById('prodModalClose').addEventListener('click', closeProductModal);
+        document.getElementById('prodModalCancel').addEventListener('click', closeProductModal);
+        document.getElementById('prodModalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeProductModal();
+        });
+        document.querySelectorAll('.prod-modal-tab').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.prod-modal-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                renderModalTab(this.dataset.modalTab);
+            });
+        });
+
+        function renderModalTab(tab) {
+            const p = modalProduct;
+            if (!p) return;
+            const body = document.getElementById('prodModalBody');
+            if (tab === 'basic') {
+                body.innerHTML =
+                    '<div class="sec-head">Clover POS Data <span class="clover-tag">Read-only from Clover</span></div>' +
+                    '<div class="fgrid2">' +
+                        '<div class="fgrp"><label>Clover Name</label><input class="readonly" readonly value="' + escHtml(p.name || '') + '"></div>' +
+                        '<div class="fgrp"><label>Clover Price</label><input class="readonly" readonly value="$' + Number(p.price || 0).toFixed(2) + '"></div>' +
+                        '<div class="fgrp"><label>SKU</label><input class="readonly" readonly value="' + escHtml(p.sku || '') + '"></div>' +
+                        '<div class="fgrp"><label>Barcode (Code)</label><input class="readonly" readonly value="' + escHtml(p.code || '') + '"></div>' +
+                        '<div class="fgrp"><label>Alt Code</label><input class="readonly" readonly value="' + escHtml(p.alt_code || '') + '"></div>' +
+                        '<div class="fgrp"><label>Clover ID</label><input class="readonly" readonly value="' + escHtml(p.id || '') + '"></div>' +
+                    '</div>' +
+                    '<div class="sec-head" style="margin-top:18px;">Local Edits <span class="clover-tag">Editable - saved locally only</span></div>' +
+                    '<div class="fgrid2">' +
+                        '<div class="fgrp"><label>Display Name (overrides Clover)</label><input id="ed_display_name" value="' + escHtml(p.display_name || '') + '"></div>' +
+                        '<div class="fgrp"><label>Price Note (promo etc.)</label><input id="ed_price_note" value="' + escHtml(p.price_note || '') + '"></div>' +
+                        '<div class="fgrp"><label>Category</label><input id="ed_category" value="' + escHtml(p.category || '') + '"></div>' +
+                        '<div class="fgrp"><label>Sub-Category</label><input id="ed_subcategory" value="' + escHtml(p.subcategory || '') + '"></div>' +
+                        '<div class="fgrp"><label>Brand</label><input id="ed_brand" value="' + escHtml(p.brand || '') + '"></div>' +
+                        '<div class="fgrp"><label>Origin / Country</label><input id="ed_origin" value="' + escHtml(p.origin || '') + '"></div>' +
+                        '<div class="fgrp"><label>Unit (each / lb / kg)</label><input id="ed_unit" value="' + escHtml(p.unit || '') + '"></div>' +
+                        '<div class="fgrp"><label>Weight / Size Spec</label><input id="ed_weight_spec" value="' + escHtml(p.weight_spec || '') + '"></div>' +
+                    '</div>' +
+                    '<div class="fgrid2" style="margin-top:4px;">' +
+                        '<div class="fgrp"><label>Status</label><select id="ed_status">' +
+                            '<option value="active"' + ((p.status || 'active') === 'active' ? ' selected' : '') + '>Active (In Stock)</option>' +
+                            '<option value="inactive"' + (p.status === 'inactive' ? ' selected' : '') + '>Inactive (Off Shelf)</option>' +
+                            '<option value="seasonal"' + (p.status === 'seasonal' ? ' selected' : '') + '>Seasonal</option>' +
+                            '<option value="limited"' + (p.status === 'limited' ? ' selected' : '') + '>Limited</option>' +
+                        '</select></div>' +
+                        '<div class="fgrp"><label>Featured Product</label><select id="ed_featured">' +
+                            '<option value="false"' + (!p.featured ? ' selected' : '') + '>No</option>' +
+                            '<option value="true"' + (p.featured ? ' selected' : '') + '>Yes (Show in Featured)</option>' +
+                        '</select></div>' +
+                    '</div>' +
+                    '<div class="fgrp" style="margin-top:4px;"><label>Tags (comma-separated: organic, local, gluten-free...)</label>' +
+                        '<input id="ed_tags" value="' + escHtml((p.tags || []).join(', ')) + '"></div>' +
+                    '<div class="fgrp"><label>Internal Notes</label><textarea id="ed_notes" rows="2">' + escHtml(p.notes || '') + '</textarea></div>';
+
+            } else if (tab === 'images') {
+                const imgUrl = p.image_url || '';
+                body.innerHTML =
+                    '<div class="sec-head">Main Product Image</div>' +
+                    '<div class="img-preview-area" id="imgPreviewArea">' +
+                        (imgUrl
+                            ? '<img src="' + escHtml(imgUrl) + '" alt="product" onerror="this.parentElement.innerHTML=\'<div class=img-no-img><span>no image</span></div>\'">'
+                            : '<div class="img-no-img"><span style="font-size:40px;opacity:.2;">🖼️</span><div>No image yet</div></div>') +
+                    '</div>' +
+                    '<div class="fgrp"><label>Main Image URL</label>' +
+                        '<input id="ed_image_url" value="' + escHtml(imgUrl) + '" placeholder="https://example.com/product.jpg"></div>' +
+                    '<div class="sec-head">Image Gallery (multiple images, one URL per line)</div>' +
+                    '<div class="fgrp"><textarea id="ed_image_gallery" rows="5" placeholder="https://example.com/img1.jpg">' +
+                        escHtml((p.image_gallery || []).join('\n')) + '</textarea></div>' +
+                    '<p class="muted-small" style="margin-top:8px;">Image URLs will be returned through the public API for your website. ' +
+                        'Upload images to Firebase Storage or a CDN first, then paste the URL here. Not written to Clover POS.</p>';
+                document.getElementById('ed_image_url').addEventListener('input', function() {
+                    const area = document.getElementById('imgPreviewArea');
+                    if (this.value) {
+                        area.innerHTML = '<img src="' + escHtml(this.value) + '" alt="preview" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.innerHTML=\'<div class=img-no-img><span>Invalid URL</span></div>\'">';
+                    } else {
+                        area.innerHTML = '<div class="img-no-img"><span style="font-size:40px;opacity:.2;">🖼️</span><div>No image</div></div>';
+                    }
+                });
+
+            } else if (tab === 'detail') {
+                const desc = p.description || (p.ai_description && p.ai_description.description) || '';
+                const kw = p.keywords || (p.ai_description && (p.ai_description.keywords || []).join(', ')) || '';
+                const sp = p.selling_points || (p.ai_description && (p.ai_description.selling_points || []).join('\n')) || '';
+                body.innerHTML =
+                    '<div class="sec-head">Product Description</div>' +
+                    '<div class="fgrp"><label>Short Description (for listing)</label><textarea id="ed_description" rows="3">' + escHtml(desc) + '</textarea></div>' +
+                    '<div class="fgrp"><label>Long Description (for detail page)</label><textarea id="ed_long_description" rows="5">' + escHtml(p.long_description || '') + '</textarea></div>' +
+                    '<div class="sec-head">SEO & Search</div>' +
+                    '<div class="fgrp"><label>Keywords (comma-separated)</label><input id="ed_keywords" value="' + escHtml(kw) + '"></div>' +
+                    '<div class="fgrp"><label>Selling Points (one per line)</label><textarea id="ed_selling_points" rows="4">' + escHtml(sp) + '</textarea></div>' +
+                    '<div class="sec-head">Nutrition & Storage</div>' +
+                    '<div class="fgrid2">' +
+                        '<div class="fgrp"><label>Allergen Info</label><input id="ed_allergens" value="' + escHtml(p.allergens || '') + '"></div>' +
+                        '<div class="fgrp"><label>Shelf Life</label><input id="ed_shelf_life" value="' + escHtml(p.shelf_life || '') + '"></div>' +
+                        '<div class="fgrp"><label>Storage Instructions</label><input id="ed_storage" value="' + escHtml(p.storage || '') + '"></div>' +
+                        '<div class="fgrp"><label>Nutrition Summary</label><input id="ed_nutrition" value="' + escHtml(p.nutrition || '') + '"></div>' +
+                    '</div>';
+
+            } else if (tab === 'ai') {
+                const cls = p.ai_classification || {};
+                const desc = p.ai_description || {};
+                const recipe = p.ai_recipe || {};
+                const imgP = p.ai_image || {};
+                const hasClass = Object.keys(cls).length > 0;
+                const hasDesc = Object.keys(desc).length > 0;
+                body.innerHTML =
+                    '<div class="sec-head">AI Classification</div>' +
+                    (hasClass
+                        ? '<div class="ai-block"><h5>Category Info</h5>' +
+                            '<div class="fgrid2">' +
+                                '<div class="fgrp"><label>Main Category</label><input id="ai_main_cat" value="' + escHtml(cls.main_category || '') + '"></div>' +
+                                '<div class="fgrp"><label>Sub Category</label><input id="ai_sub_cat" value="' + escHtml(cls.sub_category || '') + '"></div>' +
+                            '</div>' +
+                            '<div class="fgrp"><label>Attribute Tags</label><input id="ai_attrs" value="' + escHtml((cls.attributes || []).join(', ')) + '"></div></div>'
+                        : '<p class="muted-small">No AI classification yet. Use AI Classify in Sales Query tab or Batch Processing.</p>') +
+                    '<div class="sec-head" style="margin-top:18px;">AI Description</div>' +
+                    (hasDesc
+                        ? '<div class="ai-block"><h5>AI-Generated Content</h5>' +
+                            '<div class="fgrp"><label>Description</label><textarea id="ai_description" rows="3">' + escHtml(desc.description || '') + '</textarea></div>' +
+                            '<div class="fgrp"><label>Selling Points (one per line)</label><textarea id="ai_selling_points" rows="3">' + escHtml((desc.selling_points || []).join('\n')) + '</textarea></div>' +
+                            '<div class="fgrp"><label>Keywords</label><input id="ai_keywords" value="' + escHtml((desc.keywords || []).join(', ')) + '"></div></div>'
+                        : '<p class="muted-small">No AI description. Use AI Describe in Sales Query tab.</p>') +
+                    '<div class="sec-head" style="margin-top:18px;">AI Recipe</div>' +
+                    (recipe.recipe_name
+                        ? '<div class="ai-block"><h5>' + escHtml(recipe.recipe_name) + '</h5><div class="muted-small">' +
+                            escHtml(recipe.cuisine_type || '') + ' - Difficulty: ' + escHtml(recipe.difficulty || '') +
+                            ' - Prep: ' + (recipe.prep_time || 0) + 'min - Cook: ' + (recipe.cook_time || 0) + 'min</div></div>'
+                        : '<p class="muted-small">No recipe yet. Generate in Product Management - Recipe tab.</p>') +
+                    '<div class="sec-head" style="margin-top:18px;">AI Image Prompt</div>' +
+                    (imgP.prompt_en
+                        ? '<div class="ai-block"><h5>Image Prompt (EN)</h5><div class="muted-small" style="word-break:break-all;">' +
+                            escHtml((imgP.prompt_en || '').substring(0, 200)) + ((imgP.prompt_en || '').length > 200 ? '...' : '') + '</div></div>'
+                        : '<p class="muted-small">No image prompt. Generate in Product Management - Image Prompt tab.</p>');
+            }
+        }
+
+        document.getElementById('prodModalSave').addEventListener('click', async function() {
+            if (!modalProduct) return;
+            const btn = this;
+            const statusEl = document.getElementById('prodModalSaveStatus');
+            btn.disabled = true;
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = '#64748b';
+            try {
+                const edits = { clover_id: modalProduct.id };
+                const strFields = ['display_name','price_note','category','subcategory','brand','origin',
+                    'unit','weight_spec','status','notes','image_url','description','long_description',
+                    'keywords','allergens','shelf_life','storage','nutrition'];
+                strFields.forEach(f => { const el = document.getElementById('ed_' + f); if (el) edits[f] = el.value; });
+                const tagsEl = document.getElementById('ed_tags');
+                if (tagsEl) edits.tags = tagsEl.value.split(',').map(s => s.trim()).filter(Boolean);
+                const galEl = document.getElementById('ed_image_gallery');
+                if (galEl) edits.image_gallery = galEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+                const spEl = document.getElementById('ed_selling_points');
+                if (spEl) edits.selling_points = spEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+                const featEl = document.getElementById('ed_featured');
+                if (featEl) edits.featured = featEl.value === 'true';
+                const aiMC = document.getElementById('ai_main_cat');
+                if (aiMC) {
+                    edits.ai_classification_edit = {
+                        main_category: aiMC.value,
+                        sub_category: (document.getElementById('ai_sub_cat') || { value: '' }).value,
+                        attributes: ((document.getElementById('ai_attrs') || { value: '' }).value).split(',').map(s => s.trim()).filter(Boolean)
+                    };
+                }
+                const aiDE = document.getElementById('ai_description');
+                if (aiDE) {
+                    edits.ai_description_edit = {
+                        description: aiDE.value,
+                        selling_points: ((document.getElementById('ai_selling_points') || { value: '' }).value).split('\n').map(s => s.trim()).filter(Boolean),
+                        keywords: ((document.getElementById('ai_keywords') || { value: '' }).value).split(',').map(s => s.trim()).filter(Boolean)
+                    };
+                }
+                const data = await requestJson('/api/products/' + modalProduct.id + '/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(edits)
+                });
+                if (data.success) {
+                    const idx = catalogAll.findIndex(x => x.id === modalProduct.id);
+                    if (idx >= 0) { Object.assign(catalogAll[idx], edits); modalProduct = catalogAll[idx]; }
+                    document.getElementById('prodModalTitle').textContent = edits.display_name || modalProduct.name || 'Product Detail';
+                    statusEl.textContent = 'Saved locally (NOT written to Clover POS)';
+                    statusEl.style.color = '#2e7d32';
+                    filterCatalog();
+                } else {
+                    statusEl.textContent = 'Save failed';
+                    statusEl.style.color = '#b42318';
+                }
+            } catch (err) {
+                statusEl.textContent = err.message;
+                statusEl.style.color = '#b42318';
+            } finally {
+                btn.disabled = false;
+            }
+        });
 
         function renderAiResultsList(results) {
             const container = document.getElementById('aiResultsList');
@@ -1853,10 +2407,297 @@ HTML_PAGE = r'''<!DOCTYPE html>
         renderLibrary();
         syncOverview();
         
+        // Sync AI results from Firebase on startup
+        syncAIResultsFromCloud();
+        
         console.log('StockWise initialized');
         console.log('Batch Queue:', state.batchQueue.length, 'items');
         console.log('AI Library:', state.aiLibrary.length, 'records');
         console.log('Batch Results:', state.batchResults.length, 'tasks');
+        
+        // Firebase 功能
+        let firebaseCategories = [];
+        let firebaseProducts = [];
+        
+        function initFirebaseTab() {
+            loadFirebaseCategories();
+            bindFirebaseEvents();
+        }
+        
+        function bindFirebaseEvents() {
+            // 搜索按钮
+            document.getElementById('firebaseSearchButton').addEventListener('click', searchFirebaseProducts);
+            document.getElementById('firebaseLoadAllButton').addEventListener('click', loadAllFirebaseProducts);
+            document.getElementById('firebaseExportButton').addEventListener('click', exportFirebaseData);
+            
+            // 创建表单
+            document.getElementById('firebaseCreateForm').addEventListener('submit', createFirebaseProduct);
+            
+            // 同步按钮
+            document.getElementById('firebaseSyncButton').addEventListener('click', syncFromClover);
+            document.getElementById('firebaseSyncOverwriteButton').addEventListener('click', () => syncFromClover(true));
+            
+            // 统计按钮
+            document.getElementById('firebaseStatsButton').addEventListener('click', loadFirebaseStats);
+        }
+        
+        async function loadFirebaseCategories() {
+            try {
+                const response = await fetch('/api/firebase/categories');
+                const data = await response.json();
+                
+                if (data.success) {
+                    firebaseCategories = data.categories;
+                    const select = document.getElementById('firebaseCategory');
+                    select.innerHTML = '<option value="">全部分类</option>';
+                    firebaseCategories.forEach(cat => {
+                        select.innerHTML += `<option value="${cat}">${cat}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('加载分类失败:', error);
+            }
+        }
+        
+        async function searchFirebaseProducts() {
+            const searchTerm = document.getElementById('firebaseSearch').value;
+            const category = document.getElementById('firebaseCategory').value;
+            const status = document.getElementById('firebaseStatus');
+            const results = document.getElementById('firebaseResults');
+            
+            status.innerHTML = '🔍 搜索中...';
+            results.innerHTML = '';
+            
+            try {
+                const params = new URLSearchParams();
+                if (searchTerm) params.append('search', searchTerm);
+                if (category) params.append('category', category);
+                params.append('limit', '50');
+                
+                const response = await fetch(`/api/firebase/products?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    firebaseProducts = data.products;
+                    renderFirebaseProducts(data.products);
+                    status.innerHTML = `✅ 找到 ${data.count} 个商品`;
+                } else {
+                    status.innerHTML = '❌ 搜索失败';
+                }
+            } catch (error) {
+                status.innerHTML = '❌ 网络错误';
+                console.error(error);
+            }
+        }
+        
+        async function loadAllFirebaseProducts() {
+            const status = document.getElementById('firebaseStatus');
+            status.innerHTML = '📋 加载中...';
+            
+            try {
+                const response = await fetch('/api/firebase/products?limit=100');
+                const data = await response.json();
+                
+                if (data.success) {
+                    firebaseProducts = data.products;
+                    renderFirebaseProducts(data.products);
+                    status.innerHTML = `✅ 加载了 ${data.count} 个商品`;
+                }
+            } catch (error) {
+                status.innerHTML = '❌ 加载失败';
+                console.error(error);
+            }
+        }
+        
+        function renderFirebaseProducts(products) {
+            const results = document.getElementById('firebaseResults');
+            
+            if (products.length === 0) {
+                results.innerHTML = '<p class="muted">没有找到商品</p>';
+                return;
+            }
+            
+            const html = products.map(product => `
+                <div class="card" style="margin-bottom: 15px;">
+                    <div class="grid-2">
+                        <div>
+                            <h4>${product.name}</h4>
+                            <p class="muted">SKU: ${product.sku || 'N/A'} | 价格: ¥${product.price}</p>
+                            <p class="muted">分类: ${product.category || '未分类'} | 库存: ${product.stock_quantity || 0}</p>
+                            ${product.description ? `<p class="muted">${product.description}</p>` : ''}
+                        </div>
+                        <div style="text-align: right;">
+                            ${product.imageUrl ? `<img src="${product.imageUrl}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;" alt="${product.name}">` : '<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999;">无图片</div>'}
+                            <div style="margin-top: 10px;">
+                                <button class="btn secondary" onclick="editFirebaseProduct('${product.id}')">编辑</button>
+                                <button class="btn secondary" onclick="deleteFirebaseProduct('${product.id}')">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            results.innerHTML = html;
+        }
+        
+        async function createFirebaseProduct(event) {
+            event.preventDefault();
+            const status = document.getElementById('firebaseCreateStatus');
+            
+            const formData = new FormData();
+            formData.append('name', document.getElementById('firebaseName').value);
+            formData.append('price', document.getElementById('firebasePrice').value);
+            formData.append('sku', document.getElementById('firebaseSku').value);
+            formData.append('code', document.getElementById('firebaseCode').value);
+            formData.append('category', document.getElementById('firebaseCategoryCreate').value);
+            formData.append('stock_quantity', document.getElementById('firebaseStock').value);
+            formData.append('description', document.getElementById('firebaseDescription').value);
+            
+            const imageFile = document.getElementById('firebaseImage').files[0];
+            if (imageFile) {
+                formData.append('image', imageFile);
+            }
+            
+            status.innerHTML = '➕ 创建中...';
+            
+            try {
+                const response = await fetch('/api/firebase/products/create-with-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    status.innerHTML = '✅ 商品创建成功';
+                    document.getElementById('firebaseCreateForm').reset();
+                    loadAllFirebaseProducts(); // 刷新列表
+                } else {
+                    status.innerHTML = `❌ 创建失败: ${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                status.innerHTML = '❌ 网络错误';
+                console.error(error);
+            }
+        }
+        
+        async function syncFromClover(overwrite = false) {
+            const status = document.getElementById('firebaseSyncStatus');
+            const results = document.getElementById('firebaseSyncResults');
+            
+            status.innerHTML = '🔄 同步中...';
+            results.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/firebase/sync-clover?overwrite=${overwrite}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const result = data.result;
+                    status.innerHTML = `✅ 同步完成`;
+                    results.innerHTML = `
+                        <div class="card">
+                            <h4>同步结果</h4>
+                            <p>✅ 成功同步: ${result.synced} 个商品</p>
+                            <p>⏭️ 跳过: ${result.skipped} 个商品</p>
+                            <p>❌ 失败: ${result.failed} 个商品</p>
+                            ${result.errors.length > 0 ? `<p>错误详情:</p><ul>${result.errors.map(e => `<li>${e.product}: ${e.error}</li>`).join('')}</ul>` : ''}
+                        </div>
+                    `;
+                    loadAllFirebaseProducts(); // 刷新列表
+                } else {
+                    status.innerHTML = `❌ 同步失败: ${data.message}`;
+                }
+            } catch (error) {
+                status.innerHTML = '❌ 网络错误';
+                console.error(error);
+            }
+        }
+        
+        async function loadFirebaseStats() {
+            const status = document.getElementById('firebaseStatsStatus');
+            const results = document.getElementById('firebaseStatsResults');
+            
+            status.innerHTML = '📊 加载中...';
+            results.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/firebase/statistics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.statistics;
+                    status.innerHTML = '✅ 统计信息已更新';
+                    results.innerHTML = `
+                        <div class="grid-2">
+                            <div class="card">
+                                <h4>📦 商品统计</h4>
+                                <p>总商品数: ${stats.total_products}</p>
+                                <p>有图片: ${stats.with_image}</p>
+                                <p>有描述: ${stats.with_description}</p>
+                                <p>完整率: ${stats.completion_rate}%</p>
+                            </div>
+                            <div class="card">
+                                <h4>📂 分类统计</h4>
+                                <p>总分类数: ${stats.total_categories}</p>
+                                <p>总库存: ${stats.total_stock_quantity}</p>
+                                <p>库存价值: ¥${stats.total_inventory_value}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    status.innerHTML = '❌ 加载失败';
+                }
+            } catch (error) {
+                status.innerHTML = '❌ 网络错误';
+                console.error(error);
+            }
+        }
+        
+        async function exportFirebaseData() {
+            try {
+                const response = await fetch('/api/firebase/products?limit=1000');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const blob = new Blob([JSON.stringify(data.products, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `firebase_products_${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+            } catch (error) {
+                console.error('导出失败:', error);
+            }
+        }
+        
+        async function editFirebaseProduct(productId) {
+            // TODO: 实现编辑功能
+            alert('编辑功能待实现');
+        }
+        
+        async function deleteFirebaseProduct(productId) {
+            if (!confirm('确定要删除这个商品吗？')) return;
+            
+            try {
+                const response = await fetch(`/api/firebase/products/${productId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadAllFirebaseProducts(); // 刷新列表
+                } else {
+                    alert('删除失败');
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败');
+            }
+        }
     </script>
 </body>
 </html>'''
@@ -1869,6 +2710,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Firebase router if available
+if FIREBASE_ENABLED and firebase_router:
+    app.include_router(firebase_router)
+    logging.info("Firebase API endpoints enabled")
 
 try:
     app.mount("/assets", StaticFiles(directory="assets"), name="assets")
@@ -1891,6 +2737,11 @@ _startup_logger.info("CLOVER_API_KEY present: %s", bool(os.environ.get("CLOVER_A
 _startup_logger.info("MERCHANT_ID present:    %s", bool(os.environ.get("MERCHANT_ID")))
 _startup_logger.info("ANTHROPIC_API_KEY present: %s", bool(os.environ.get("ANTHROPIC_API_KEY")))
 _startup_logger.info("GEMINI_API_KEY present:    %s", bool(os.environ.get("GEMINI_API_KEY")))
+_startup_logger.info("FIREBASE_ENABLED: %s", FIREBASE_ENABLED)
+if FIREBASE_ENABLED:
+    _startup_logger.info("FIREBASE_SERVICE_ACCOUNT_PATH present: %s", bool(os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")))
+    _startup_logger.info("FIREBASE_SERVICE_ACCOUNT_JSON present: %s", bool(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")))
+    _startup_logger.info("FIREBASE_STORAGE_BUCKET: %s", os.environ.get("FIREBASE_STORAGE_BUCKET", "stockwise-486801.appspot.com"))
 if not os.environ.get("CLOVER_API_KEY") or not os.environ.get("MERCHANT_ID"):
     _startup_logger.error(
         "MISSING REQUIRED ENV VARS: CLOVER_API_KEY and/or MERCHANT_ID not set. "
@@ -2778,6 +3629,219 @@ async def get_products_with_ai_results():
             "count": len(merged),
             "timestamp": datetime.now().isoformat()
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# CATALOG MANAGEMENT - Local edits storage (keyed by Clover product ID)
+# =============================================================================
+
+CATALOG_EDITS_FILE = os.path.join("data", "catalog_edits.json")
+
+
+def _load_catalog_edits() -> dict:
+    os.makedirs("data", exist_ok=True)
+    if not os.path.exists(CATALOG_EDITS_FILE):
+        return {}
+    try:
+        with open(CATALOG_EDITS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_catalog_edits(edits: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(CATALOG_EDITS_FILE, "w", encoding="utf-8") as f:
+        json.dump(edits, f, ensure_ascii=False, indent=2)
+
+
+def _build_catalog_product(clover_item: dict, local_edits: dict, ai_result: dict) -> dict:
+    """Merge a Clover inventory item with local edits and AI results into one catalog record."""
+    raw_price = clover_item.get("price", 0)
+    p: dict = {
+        "id": clover_item.get("id", ""),
+        "name": clover_item.get("name", ""),
+        "price": raw_price / 100 if isinstance(raw_price, int) and raw_price > 100 else raw_price,
+        "sku": clover_item.get("sku", ""),
+        "code": clover_item.get("code", ""),
+        "alt_code": clover_item.get("alternateName", ""),
+    }
+    if local_edits:
+        for field in [
+            "display_name", "price_note", "category", "subcategory", "brand", "origin",
+            "unit", "weight_spec", "status", "featured", "tags", "notes",
+            "image_url", "image_gallery", "description", "long_description",
+            "keywords", "selling_points", "allergens", "shelf_life", "storage", "nutrition",
+        ]:
+            if field in local_edits:
+                p[field] = local_edits[field]
+    if ai_result:
+        if ai_result.get("classification"):
+            p["ai_classification"] = ai_result["classification"]
+        if ai_result.get("description"):
+            p["ai_description"] = ai_result["description"]
+        if ai_result.get("recipe"):
+            p["ai_recipe"] = ai_result["recipe"]
+        if ai_result.get("image_info"):
+            p["ai_image"] = ai_result["image_info"]
+    # Apply local AI edits (override stored AI results with user corrections)
+    if local_edits:
+        if local_edits.get("ai_classification_edit"):
+            p["ai_classification"] = {**(p.get("ai_classification") or {}), **local_edits["ai_classification_edit"]}
+        if local_edits.get("ai_description_edit"):
+            p["ai_description"] = {**(p.get("ai_description") or {}), **local_edits["ai_description_edit"]}
+    return p
+
+
+def _find_ai_result_for_id(ai_results: list, clover_id: str) -> Optional[dict]:
+    for ar in ai_results:
+        pi = ar.get("product_info") or {}
+        if pi.get("id") == clover_id or pi.get("clover_id") == clover_id:
+            return ar
+    return None
+
+
+@app.get("/api/products/catalog")
+async def get_products_catalog():
+    """Fetch full product catalog: Clover inventory + local edits + AI results."""
+    try:
+        api = get_api_handler()
+        inventory = api.fetch_full_inventory()
+        if not inventory:
+            return {"products": [], "count": 0, "categories": [], "timestamp": datetime.now().isoformat()}
+
+        local_edits = _load_catalog_edits()
+        store = get_ai_results_store()
+        ai_results = store.get_all_results({})
+
+        catalog = []
+        for item in inventory:
+            cid = item.get("id", "")
+            ai_res = _find_ai_result_for_id(ai_results, cid)
+            catalog.append(_build_catalog_product(item, local_edits.get(cid), ai_res))
+
+        categories = sorted({
+            p.get("category") or (p.get("ai_classification") or {}).get("main_category", "")
+            for p in catalog
+            if p.get("category") or (p.get("ai_classification") or {}).get("main_category")
+        })
+
+        return {
+            "products": catalog,
+            "count": len(catalog),
+            "categories": [c for c in categories if c],
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/products/{product_id}/update")
+async def update_product_local(product_id: str, payload: Dict):
+    """Save product field edits locally. Does NOT write anything to Clover POS."""
+    try:
+        edits = _load_catalog_edits()
+        record = edits.get(product_id, {})
+
+        # Editable product fields to persist
+        editable = [
+            "display_name", "price_note", "category", "subcategory", "brand", "origin",
+            "unit", "weight_spec", "status", "featured", "tags", "notes",
+            "image_url", "image_gallery", "description", "long_description",
+            "keywords", "selling_points", "allergens", "shelf_life", "storage", "nutrition",
+        ]
+        for field in editable:
+            if field in payload:
+                record[field] = payload[field]
+        # Store AI field edits (merged with AI results in _build_catalog_product)
+        if payload.get("ai_classification_edit"):
+            record["ai_classification_edit"] = payload["ai_classification_edit"]
+        if payload.get("ai_description_edit"):
+            record["ai_description_edit"] = payload["ai_description_edit"]
+        record["updated_at"] = datetime.now().isoformat()
+        edits[product_id] = record
+        _save_catalog_edits(edits)
+
+        return {
+            "success": True,
+            "product": record,
+            "message": "Saved locally. NOT written to Clover POS.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# PUBLIC API - For supermarket website (no authentication required)
+# =============================================================================
+
+@app.get("/api/public/products")
+async def public_get_products(
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    featured: Optional[bool] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Public product catalog API for supermarket website. No authentication required."""
+    try:
+        api = get_api_handler()
+        inventory = api.fetch_full_inventory() or []
+        local_edits = _load_catalog_edits()
+        store = get_ai_results_store()
+        ai_results = store.get_all_results({})
+
+        catalog = []
+        for item in inventory:
+            cid = item.get("id", "")
+            p = _build_catalog_product(item, local_edits.get(cid), _find_ai_result_for_id(ai_results, cid))
+
+            if search:
+                q = search.lower()
+                name_match = q in (p.get("display_name") or p.get("name") or "").lower()
+                sku_match = q in (p.get("sku") or "").lower()
+                desc_match = q in (p.get("description") or "").lower()
+                if not (name_match or sku_match or desc_match):
+                    continue
+            if category:
+                pcat = (p.get("category") or (p.get("ai_classification") or {}).get("main_category") or "").lower()
+                if pcat != category.lower():
+                    continue
+            if featured is not None and bool(p.get("featured")) != featured:
+                continue
+            catalog.append(p)
+
+        return {
+            "products": catalog[offset: offset + limit],
+            "total": len(catalog),
+            "limit": limit,
+            "offset": offset,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/public/products/{product_id}")
+async def public_get_product(product_id: str):
+    """Get a single product's full detail including AI data (public, no auth required)."""
+    try:
+        api = get_api_handler()
+        inventory = api.fetch_full_inventory() or []
+        item = next((i for i in inventory if i.get("id") == product_id), None)
+        if not item:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        local_edits = _load_catalog_edits()
+        store = get_ai_results_store()
+        ai_results = store.get_all_results({})
+        p = _build_catalog_product(item, local_edits.get(product_id), _find_ai_result_for_id(ai_results, product_id))
+
+        return {"product": p, "timestamp": datetime.now().isoformat()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

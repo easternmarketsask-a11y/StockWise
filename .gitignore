@@ -151,3 +151,10 @@ Thumbs.db
 # CSV exports (sensitive data)
 *.csv
 Sales_Summary_*.csv
+
+# Firebase and Google Cloud credentials
+serviceAccountKey.json
+firebase_env.txt
+firebase_env.yaml
+firebase_env_config.txt
+.env.firebase
