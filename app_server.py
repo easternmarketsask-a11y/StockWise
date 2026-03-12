@@ -10,6 +10,10 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from api_handler import CloverAPIHandler
 from data_engine import DataEngine
@@ -25,6 +29,9 @@ except Exception as e:
     FIREBASE_ENABLED = False
     firebase_router = None
     logging.warning(f"Firebase not available: {e}")
+
+# Import secure configuration
+from secure_config import get_anthropic_api_key, get_gemini_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +208,39 @@ HTML_PAGE = r'''<!DOCTYPE html>
         .ai-block { background: #f8fbff; border: 1px solid #dbe7f8; border-radius: 12px; padding: 13px; margin-top: 10px; }
         .ai-block h5 { font-size: 13px; font-weight: 700; color: #214a94; margin: 0 0 10px; }
         @media (max-width: 900px) { .container { flex-direction: column; } .sidebar { width: 100%; } .sidebar-shell { position: static; padding: 14px; } .tabs { flex-direction: row; flex-wrap: wrap; } .tab-button { flex: 1 1 auto; text-align: center; } .cards, .grid-2, .grid-3, .metrics, .hero, .search-layout, .detail-grid { grid-template-columns: 1fr; } .header-inner { flex-direction: column; align-items: flex-start; } .header { padding: 16px 18px; } .header-badge, .panel-meta { display: none; } .panel-header { padding-bottom: 12px; margin-bottom: 16px; } .product-top { flex-direction: column; } .product-actions { width: 100%; } .two-column-actions { grid-template-columns: 1fr 1fr; } }
+        /* === Catalog Selection & Batch AI Panel === */
+        .catalog-card { position: relative; }
+        .catalog-card.cat-selected { border: 2px solid #1e63d2 !important; background: #eef5ff !important; box-shadow: 0 0 0 3px rgba(30,99,210,.15) !important; }
+        .catalog-cb-wrap { position: absolute; top: 8px; left: 8px; z-index: 3; }
+        .catalog-cb-wrap input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: #1e63d2; }
+        #catalogSelToolbar { display: none; background: linear-gradient(135deg,#1e3a8a,#1e63d2); color: #fff; border-radius: 12px; padding: 12px 18px; margin: 10px 0; align-items: center; gap: 10px; flex-wrap: wrap; }
+        #catalogSelToolbar.visible { display: flex; }
+        .cst-count { font-weight: 700; font-size: 14px; flex: 1; min-width: 120px; }
+        .cst-ai-select { border-radius: 8px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.15); color: #fff; font-size: 13px; cursor: pointer; }
+        .cst-ai-select option { background: #1e3a8a; color: #fff; }
+        .cst-btn { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background .15s; white-space: nowrap; }
+        .cst-btn:hover { background: rgba(255,255,255,.3); }
+        .cst-btn.cst-primary { background: #fff; color: #1e3a8a; }
+        .cst-btn.cst-primary:hover { background: #f0f4ff; }
+        .cst-btn:disabled { opacity: .5; cursor: not-allowed; }
+        #catalogAIPanel { display: none; border: 1px solid #d0daf0; border-radius: 14px; padding: 20px; margin-top: 14px; background: #f8fbff; }
+        #catalogAIPanel.visible { display: block; }
+        #catalogAIPanel h4 { margin: 0 0 12px; font-size: 16px; font-weight: 700; color: #162033; }
+        .cai-progress-bar { background: #dbeafe; border-radius: 8px; height: 10px; overflow: hidden; margin: 10px 0 4px; }
+        .cai-progress-fill { height: 100%; background: #1e63d2; border-radius: 8px; transition: width .4s ease; }
+        .cai-progress-text { font-size: 13px; color: #64748b; margin-bottom: 14px; }
+        .cai-result-card { background: #fff; border: 1px solid #e6ecf5; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+        .cai-result-card.cai-ok { border-left: 4px solid #2e7d32; }
+        .cai-result-card.cai-err { border-left: 4px solid #b42318; }
+        .cai-result-name { font-weight: 700; font-size: 14px; color: #162033; margin-bottom: 6px; }
+        .cai-result-meta { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+        .cai-result-body { font-size: 13px; color: #374151; line-height: 1.6; }
+        .cai-result-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+        .cai-result-tag { background: #dbeafe; color: #1e40af; border-radius: 5px; padding: 2px 8px; font-size: 12px; }
+        .cai-result-tag.green { background: #dcfce7; color: #166534; }
+        .cai-result-tag.orange { background: #fed7aa; color: #9a3412; }
+        .cai-export-btn { margin-top: 14px; background: #1e63d2; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .cai-export-btn:hover { background: #1748b3; }
     </style>
 </head>
 <body>
@@ -338,12 +378,32 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <div id="productMgmtStatus" class="status"></div>
                 <div id="catalogStatsBar" class="catalog-stats-bar" style="display:none;"></div>
                 <div id="productMgmtMetrics" class="metrics" style="display:none;"></div>
+                <div id="catalogSelToolbar">
+                    <span class="cst-count" id="catalogSelCount">已选 0 个商品</span>
+                    <select id="catalogAIType" class="cst-ai-select">
+                        <option value="classify">🏷️ AI 商品分类</option>
+                        <option value="describe">📝 AI 商品描述</option>
+                        <option value="recipe">🍳 AI 食谱推荐</option>
+                        <option value="image">🖼️ AI 图片提示词</option>
+                    </select>
+                    <button class="cst-btn cst-primary" id="catalogRunAIBtn">▶ 开始AI处理</button>
+                    <button class="cst-btn" id="catalogSelAllBtn">☑ 全选当前筛选</button>
+                    <button class="cst-btn" id="catalogSelClearBtn">✕ 取消选择</button>
+                </div>
                 <div id="productsList">
                     <div class="empty-state">
                         <div class="empty-state-icon">🛒</div>
                         <strong>点击"同步Clover商品"加载完整商品目录</strong>
                         <p class="muted-small" style="margin-top:8px;">系统将从Clover POS拉取全部商品，并合并本地编辑与AI处理结果</p>
                     </div>
+                </div>
+                <div id="catalogAIPanel">
+                    <h4 id="catalogAIPanelTitle">🤖 AI 处理结果</h4>
+                    <div id="catalogAIStatus" class="status"></div>
+                    <div class="cai-progress-bar" id="catalogAIProgressBar" style="display:none;"><div class="cai-progress-fill" id="catalogAIProgressFill" style="width:0%"></div></div>
+                    <div class="cai-progress-text" id="catalogAIProgressText"></div>
+                    <div id="catalogAIResultsList"></div>
+                    <button class="cai-export-btn" id="catalogAIExportBtn" style="display:none">💾 导出AI结果 JSON</button>
                 </div>
                 <div class="pub-api-box">
                     <h4>🌐 超市网页公共调用API</h4>
@@ -618,6 +678,8 @@ HTML_PAGE = r'''<!DOCTYPE html>
         let catalogAll = [];
         let catalogFiltered = [];
         let modalProduct = null;
+        let catalogSelected = new Set();
+        let catalogAILastResults = [];
 
         function setDefaultDates() {
             const today = new Date();
@@ -1781,6 +1843,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
         document.getElementById('catalogStatusFilter').addEventListener('change', filterCatalog);
 
         document.getElementById('productsList').addEventListener('click', function(e) {
+            if (e.target.closest('.catalog-cb-wrap')) return;
             const target = e.target.closest('[data-product-id]');
             if (target) openProductModal(target.dataset.productId);
         });
@@ -1829,10 +1892,12 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 const hasAI = !!(p.ai_classification || p.ai_description);
                 const hasImg = !!p.image_url;
                 const pid = escHtml(p.id || '');
+                const isSel = catalogSelected.has(p.id || '');
                 const imgHtml = hasImg
                     ? '<img src="' + escHtml(p.image_url) + '" alt="' + name + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'<div class=catalog-img-icon>🛒</div>\'">'
                     : '<div class="catalog-img-icon">🛒</div>';
-                return '<div class="catalog-card" data-product-id="' + pid + '">' +
+                return '<div class="catalog-card' + (isSel ? ' cat-selected' : '') + '" data-product-id="' + pid + '">' +
+                    '<div class="catalog-cb-wrap"><input type="checkbox" class="catalog-cb"' + (isSel ? ' checked' : '') + ' onclick="event.stopPropagation();toggleCatalogCard(\'' + pid + '\')" title="勾选进行AI批量处理"></div>' +
                     '<div class="catalog-img-wrap">' + imgHtml + '</div>' +
                     '<div class="catalog-body">' +
                         '<div class="catalog-name" title="' + name + '">' + name + '</div>' +
@@ -1850,6 +1915,185 @@ HTML_PAGE = r'''<!DOCTYPE html>
             }).join('');
             container.innerHTML = '<div class="catalog-grid">' + cards + '</div>';
         }
+
+        // === Catalog Selection & AI Processing ===
+        function toggleCatalogCard(productId) {
+            if (!productId) return;
+            if (catalogSelected.has(productId)) {
+                catalogSelected.delete(productId);
+            } else {
+                catalogSelected.add(productId);
+            }
+            const card = document.querySelector('.catalog-card[data-product-id="' + productId + '"]');
+            if (card) {
+                card.classList.toggle('cat-selected', catalogSelected.has(productId));
+                const cb = card.querySelector('.catalog-cb');
+                if (cb) cb.checked = catalogSelected.has(productId);
+            }
+            updateCatalogSelToolbar();
+        }
+
+        function updateCatalogSelToolbar() {
+            const toolbar = document.getElementById('catalogSelToolbar');
+            const countEl = document.getElementById('catalogSelCount');
+            if (!toolbar) return;
+            const count = catalogSelected.size;
+            if (count > 0) {
+                toolbar.classList.add('visible');
+                countEl.textContent = '已选 ' + count + ' 个商品';
+            } else {
+                toolbar.classList.remove('visible');
+            }
+        }
+
+        async function runCatalogAI() {
+            const type = document.getElementById('catalogAIType').value;
+            const selectedIds = Array.from(catalogSelected);
+            if (!selectedIds.length) {
+                setStatus('productMgmtStatus', '请先勾选商品再执行AI处理。', 'error');
+                return;
+            }
+            const products = catalogAll.filter(p => p.id && selectedIds.includes(p.id));
+            const typeLabels = { classify: 'AI商品分类', describe: 'AI商品描述', recipe: 'AI食谱推荐', image: 'AI图片提示词' };
+            const panel = document.getElementById('catalogAIPanel');
+            const titleEl = document.getElementById('catalogAIPanelTitle');
+            const aiSt = document.getElementById('catalogAIStatus');
+            const progressBar = document.getElementById('catalogAIProgressBar');
+            const progressFill = document.getElementById('catalogAIProgressFill');
+            const progressText = document.getElementById('catalogAIProgressText');
+            const resultsList = document.getElementById('catalogAIResultsList');
+            const exportBtn = document.getElementById('catalogAIExportBtn');
+            const runBtn = document.getElementById('catalogRunAIBtn');
+
+            panel.classList.add('visible');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            titleEl.textContent = '🤖 ' + (typeLabels[type] || 'AI处理') + ' — 处理中...';
+            aiSt.className = 'status info';
+            aiSt.textContent = '正在处理 ' + products.length + ' 个商品，请稍候...';
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+            resultsList.innerHTML = '';
+            exportBtn.style.display = 'none';
+            runBtn.disabled = true;
+
+            let successCount = 0, failCount = 0;
+            catalogAILastResults = [];
+
+            for (let i = 0; i < products.length; i++) {
+                const p = products[i];
+                const pct = Math.round(((i + 1) / products.length) * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = '处理中 ' + (i + 1) + '/' + products.length + '：' + escHtml(p.display_name || p.name || '');
+                const payload = { name: p.display_name || p.name || '', sku: p.sku || '', code: p.code || '', price: p.price || 0 };
+                try {
+                    let result = null;
+                    if (type === 'classify') {
+                        result = await requestJson('/api/ai/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        await requestJson('/api/products/' + p.id + '/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clover_id: p.id, ai_classification_edit: { main_category: result.main_category || '', sub_category: result.sub_category || '', attributes: result.attributes || [] } }) });
+                        const idx = catalogAll.findIndex(x => x.id === p.id);
+                        if (idx >= 0) catalogAll[idx].ai_classification = result;
+                    } else if (type === 'describe') {
+                        result = await requestJson('/api/ai/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        await requestJson('/api/products/' + p.id + '/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clover_id: p.id, description: result.description || '', ai_description_edit: { description: result.description || '', selling_points: result.selling_points || [], keywords: result.keywords || [] } }) });
+                        const idx = catalogAll.findIndex(x => x.id === p.id);
+                        if (idx >= 0) catalogAll[idx].ai_description = result;
+                    } else if (type === 'recipe') {
+                        const resp = await requestJson('/api/ai/recipe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_info: payload, recipe_type: 'simple' }) });
+                        result = resp.recipe;
+                        const idx = catalogAll.findIndex(x => x.id === p.id);
+                        if (idx >= 0) catalogAll[idx].ai_recipe = result;
+                    } else if (type === 'image') {
+                        const resp = await requestJson('/api/ai/image-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_info: payload, style: 'realistic' }) });
+                        result = resp.image_prompt;
+                        const idx = catalogAll.findIndex(x => x.id === p.id);
+                        if (idx >= 0) catalogAll[idx].ai_image = result;
+                    }
+                    catalogAILastResults.push({ product: p, result, type, success: true });
+                    successCount++;
+                    resultsList.insertAdjacentHTML('afterbegin', buildCatalogAIResultCard(type, p, result));
+                } catch (err) {
+                    catalogAILastResults.push({ product: p, error: err.message, type, success: false });
+                    failCount++;
+                    resultsList.insertAdjacentHTML('afterbegin',
+                        '<div class="cai-result-card cai-err"><div class="cai-result-name">' + escHtml(p.display_name || p.name || '') + '</div>' +
+                        '<div class="cai-result-body" style="color:#b42318;">❌ ' + escHtml(err.message) + '</div></div>');
+                }
+            }
+
+            progressBar.style.display = 'none';
+            progressText.textContent = '';
+            titleEl.textContent = '🤖 ' + (typeLabels[type] || 'AI处理') + ' — 完成';
+            aiSt.className = 'status ' + (failCount > 0 ? 'error' : 'success');
+            aiSt.textContent = '处理完成：✅ 成功 ' + successCount + ' 个 / ❌ 失败 ' + failCount + ' 个';
+            exportBtn.style.display = 'inline-block';
+            runBtn.disabled = false;
+            filterCatalog();
+        }
+
+        function buildCatalogAIResultCard(type, p, result) {
+            const name = escHtml(p.display_name || p.name || '');
+            if (type === 'classify') {
+                const attrTags = (result.attributes || []).map(a => '<span class="cai-result-tag">' + escHtml(a) + '</span>').join('');
+                return '<div class="cai-result-card cai-ok">' +
+                    '<div class="cai-result-name">' + name + '</div>' +
+                    '<div class="cai-result-tags">' +
+                        '<span class="cai-result-tag green">主类: ' + escHtml(result.main_category || '') + '</span>' +
+                        '<span class="cai-result-tag">子类: ' + escHtml(result.sub_category || '') + '</span>' +
+                        (result.confidence_score ? '<span class="cai-result-tag orange">置信度 ' + Math.round(result.confidence_score * 100) + '%</span>' : '') +
+                    '</div>' +
+                    (attrTags ? '<div class="cai-result-tags" style="margin-top:4px;">' + attrTags + '</div>' : '') +
+                '</div>';
+            } else if (type === 'describe') {
+                const kwTags = (result.keywords || []).map(k => '<span class="cai-result-tag">' + escHtml(k) + '</span>').join('');
+                return '<div class="cai-result-card cai-ok">' +
+                    '<div class="cai-result-name">' + name + '</div>' +
+                    '<div class="cai-result-body">' + escHtml(result.description || '') + '</div>' +
+                    (kwTags ? '<div class="cai-result-tags" style="margin-top:8px;">' + kwTags + '</div>' : '') +
+                '</div>';
+            } else if (type === 'recipe') {
+                return '<div class="cai-result-card cai-ok">' +
+                    '<div class="cai-result-name">' + name + '</div>' +
+                    '<div class="cai-result-meta">' + escHtml(result.recipe_name || '') + (result.cuisine_type ? ' | ' + escHtml(result.cuisine_type) : '') + (result.cook_time ? ' | 烹饪 ' + result.cook_time + ' 分钟' : '') + '</div>' +
+                    '<div class="cai-result-tags">' +
+                        (result.difficulty ? '<span class="cai-result-tag green">难度: ' + escHtml(result.difficulty) + '</span>' : '') +
+                        (result.servings ? '<span class="cai-result-tag">' + result.servings + ' 人份</span>' : '') +
+                    '</div>' +
+                '</div>';
+            } else if (type === 'image') {
+                const promptText = result.prompt_en || result.prompt || '';
+                return '<div class="cai-result-card cai-ok">' +
+                    '<div class="cai-result-name">' + name + '</div>' +
+                    '<div class="cai-result-body" style="background:#f8fbff;padding:8px;border-radius:6px;font-size:12px;word-break:break-all;">' + escHtml(promptText.substring(0, 220)) + (promptText.length > 220 ? '…' : '') + '</div>' +
+                    '<div class="cai-result-tags" style="margin-top:6px;"><span class="cai-result-tag">风格: ' + escHtml(result.style || 'realistic') + '</span></div>' +
+                '</div>';
+            }
+            return '';
+        }
+
+        function exportCatalogAIResults() {
+            if (!catalogAILastResults.length) return;
+            const blob = new Blob([JSON.stringify(catalogAILastResults, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'catalog_ai_results_' + new Date().toISOString().slice(0, 10) + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        document.getElementById('catalogRunAIBtn').addEventListener('click', runCatalogAI);
+        document.getElementById('catalogAIExportBtn').addEventListener('click', exportCatalogAIResults);
+        document.getElementById('catalogSelAllBtn').addEventListener('click', function() {
+            catalogFiltered.forEach(p => { if (p.id) catalogSelected.add(p.id); });
+            renderCatalogGrid();
+            updateCatalogSelToolbar();
+        });
+        document.getElementById('catalogSelClearBtn').addEventListener('click', function() {
+            catalogSelected.clear();
+            renderCatalogGrid();
+            updateCatalogSelToolbar();
+        });
+        window.toggleCatalogCard = toggleCatalogCard;
 
         document.getElementById('exportProductsButton').addEventListener('click', async () => {
             try {
@@ -2522,7 +2766,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
                     <div class="grid-2">
                         <div>
                             <h4>${product.name}</h4>
-                            <p class="muted">SKU: ${product.sku || 'N/A'} | 价格: ¥${product.price}</p>
+                            <p class="muted">SKU: ${product.sku || 'N/A'} | 价格: $${product.price}</p>
                             <p class="muted">分类: ${product.category || '未分类'} | 库存: ${product.stock_quantity || 0}</p>
                             ${product.description ? `<p class="muted">${product.description}</p>` : ''}
                         </div>
@@ -2589,7 +2833,9 @@ HTML_PAGE = r'''<!DOCTYPE html>
             results.innerHTML = '';
             
             try {
-                const response = await fetch(`/api/firebase/sync-clover?overwrite=${overwrite}`);
+                const response = await fetch(`/api/firebase/sync-clover?overwrite=${overwrite}`, {
+                    method: 'POST'
+                });
                 const data = await response.json();
                 
                 if (data.success) {
@@ -2641,7 +2887,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
                                 <h4>📂 分类统计</h4>
                                 <p>总分类数: ${stats.total_categories}</p>
                                 <p>总库存: ${stats.total_stock_quantity}</p>
-                                <p>库存价值: ¥${stats.total_inventory_value}</p>
+                                <p>库存价值: $${stats.total_inventory_value}</p>
                             </div>
                         </div>
                     `;
@@ -2706,7 +2952,7 @@ app = FastAPI(title="StockWise", version="2.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2854,30 +3100,32 @@ def compare_period_sales(api: CloverAPIHandler, item_ids: List[str], start_date:
 
 def get_ai_client():
     """获取AI客户端，支持Anthropic和Gemini"""
-    # 优先使用Anthropic
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    # 优先使用Anthropic (从Secret Manager获取)
+    anthropic_key = get_anthropic_api_key().strip()
     if anthropic_key:
         try:
             from anthropic import Anthropic
-            return Anthropic(api_key=anthropic_key), "anthropic", None
-        except ImportError:
-            return None, "", "anthropic 依赖未安装，请运行: pip install anthropic"
+            client = Anthropic(api_key=anthropic_key)
+            logger.info("Anthropic AI client initialized with secure configuration")
+            return client, "anthropic", ""
         except Exception as exc:
             logger.exception("Anthropic client init failed")
             return None, "", str(exc)
     
-    # 回退到Gemini
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    # 回退到Gemini (从Secret Manager获取)
+    gemini_key = get_gemini_api_key().strip()
     if gemini_key:
         if genai is None:
             return None, "", "google-genai 依赖未安装"
         try:
-            return genai.Client(api_key=gemini_key), "gemini", None
+            genai.configure(api_key=gemini_key)
+            logger.info("Gemini AI client initialized with secure configuration")
+            return genai, "gemini", ""
         except Exception as exc:
             logger.exception("Gemini client init failed")
             return None, "", str(exc)
     
-    return None, "", "ANTHROPIC_API_KEY 或 GEMINI_API_KEY 未配置"
+    return None, "", "AI API keys not configured in Secret Manager"
 
 
 def generate_ai_json(prompt: str) -> Dict:
@@ -3104,12 +3352,13 @@ async def ai_classify(payload: Dict):
     name = str(payload.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Product name is required")
-    prompt = f'''请对以下商品进行智能分类，返回严格 JSON：
+    prompt = f'''你是北美华人超市（Eastern Market，加拿大萨斯喀彻温省）的商品分类专家。
+请结合中式烹饪习惯和华人饮食文化，对以下商品进行分类，返回严格 JSON：
 {{
-  "main_category": "主类别",
+  "main_category": "主类别（如蔬果、肉类、海鲜、干货调料、冷冻食品、熟食卤味、饮料零食、日用品等）",
   "sub_category": "子类别",
   "attributes": ["属性1", "属性2"],
-  "target_customers": ["目标客户1"],
+  "target_customers": ["华人家庭"],
   "storage_requirements": "存储要求",
   "confidence_score": 0.95
 }}
@@ -3127,12 +3376,13 @@ async def ai_describe(payload: Dict):
     if not name:
         raise HTTPException(status_code=400, detail="Product name is required")
     target_length = str(payload.get("target_length") or "medium")
-    prompt = f'''请为以下商品生成营销描述，返回严格 JSON：
+    prompt = f'''你是北美华人超市（Eastern Market，加拿大萨斯喀彻温省）的商品营销文案专家。
+请结合华人饮食文化和中式烹饪习惯，为以下商品生成吸引华人顾客的营销描述，返回严格 JSON：
 {{
-  "description": "商品描述",
+  "description": "商品描述（融入中式烹饪使用场景）",
   "keywords": ["关键词1", "关键词2"],
   "selling_points": ["卖点1", "卖点2"],
-  "usage_suggestions": "使用建议",
+  "usage_suggestions": "中式烹饪用法建议",
   "confidence_score": 0.90
 }}
 商品名称: {name}
@@ -3666,7 +3916,7 @@ def _build_catalog_product(clover_item: dict, local_edits: dict, ai_result: dict
         "price": raw_price / 100 if isinstance(raw_price, int) and raw_price > 100 else raw_price,
         "sku": clover_item.get("sku", ""),
         "code": clover_item.get("code", ""),
-        "alt_code": clover_item.get("alternateName", ""),
+        "alt_code": clover_item.get("alt_code", ""),
     }
     if local_edits:
         for field in [

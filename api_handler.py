@@ -2,26 +2,28 @@ import requests
 import logging
 import os
 from dotenv import load_dotenv
+from secure_config import get_clover_api_key, get_merchant_id
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
 class CloverAPIHandler:
     def __init__(self):
-        # Load .env file
+        # Load .env file as fallback
         load_dotenv()
 
-        # Support multiple env var formats
-        self.api_key = str(os.environ.get("CLOVER_API_KEY", "")).strip()
-        self.merchant_id = str(os.environ.get("MERCHANT_ID", "")).strip() or str(os.environ.get("CLOVER_MERCHANT_ID", "")).strip()
+        # Use secure configuration from Secret Manager
+        self.api_key = get_clover_api_key().strip()
+        self.merchant_id = get_merchant_id().strip()
 
         # Validate config
         if not self.api_key or not self.merchant_id:
             logger.error("API config missing: CLOVER_API_KEY and MERCHANT_ID required")
-            raise ValueError("API configuration missing. Set CLOVER_API_KEY and MERCHANT_ID environment variables.")
+            raise ValueError("API configuration missing. Check Secret Manager secrets: clover-api-key and merchant-id")
 
         self.base_url = f"https://api.clover.com/v3/merchants/{self.merchant_id}"
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
+        logger.info("Clover API handler initialized with secure configuration")
 
     def fetch_full_inventory(self):
         """Fetch full inventory"""
