@@ -153,7 +153,9 @@ Thumbs.db
 Sales_Summary_*.csv
 
 # Firebase and Google Cloud credentials
+*.json
 serviceAccountKey.json
+serviceAccountKey_members.json
 firebase_env.txt
 firebase_env.yaml
 firebase_env_config.txt

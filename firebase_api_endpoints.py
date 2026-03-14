@@ -3,13 +3,36 @@ Firebase API Endpoints for FastAPI
 RESTful API endpoints for Firebase product management
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import JSONResponse
 from typing import Optional, Dict, List
 import logging
+import re
 from firebase_integration import get_firebase_integration
 from firebase_product_manager import get_firebase_product_manager
 from firebase_ai_manager import FirebaseAIManager
 
 logger = logging.getLogger(__name__)
+
+# Input validation helpers
+def validate_member_id(member_id: str) -> bool:
+    """Validate member_id: non-empty string, length 10-128 characters"""
+    if not member_id or not isinstance(member_id, str):
+        return False
+    return 10 <= len(member_id) <= 128
+
+def validate_points(points: int) -> bool:
+    """Validate points: integer, range -10000 to 10000"""
+    if not isinstance(points, int):
+        return False
+    return -10000 <= points <= 10000
+
+def validate_phone(phone: str) -> bool:
+    """Validate phone: Canadian format +1XXXXXXXXXX"""
+    if not phone or not isinstance(phone, str):
+        return False
+    # Match +1 followed by exactly 10 digits
+    pattern = r'^\+1\d{10}$'
+    return bool(re.match(pattern, phone))
 
 # Create API router
 firebase_router = APIRouter(prefix="/api/firebase", tags=["Firebase"])

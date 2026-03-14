@@ -1,3 +1,9 @@
+# ==============================================================================
+# Eastern Market StockWise - 主应用服务器
+# 版本：整合版 v2.0（原 app_server.py + web_app.py 优化合并）
+# 已废弃：web_app.py, simple_app.py（保留备份，不再维护）
+# ==============================================================================
+
 from datetime import datetime, timedelta
 import json
 import logging
@@ -2951,9 +2957,14 @@ HTML_PAGE = r'''<!DOCTYPE html>
 app = FastAPI(title="StockWise", version="2.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_origins=[
+        "https://easternmarket.ca",
+        "https://www.easternmarket.ca",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -3234,7 +3245,7 @@ async def search_sales(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid parameters: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

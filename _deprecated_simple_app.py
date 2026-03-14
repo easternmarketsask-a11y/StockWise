@@ -24,9 +24,14 @@ app = FastAPI(title="StockWise API", version="2.0.0")
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://easternmarket.ca",
+        "https://www.easternmarket.ca",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

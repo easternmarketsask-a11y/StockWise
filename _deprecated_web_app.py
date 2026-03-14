@@ -18,9 +18,14 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="StockWise", version="2.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://easternmarket.ca",
+        "https://www.easternmarket.ca",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
