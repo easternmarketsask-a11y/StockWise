@@ -97,3 +97,12 @@ def get_gemini_api_key() -> str:
     """Get Gemini API key securely"""
     config = get_secure_config()
     return config.get_secret("gemini-api-key") or ""
+
+def get_admin_token() -> str:
+    """Get Admin Token securely"""
+    config = get_secure_config()
+    # Try secret manager first, then fall back to environment variable
+    token = config.get_secret("admin-token")
+    if not token:
+        token = os.environ.get("ADMIN_TOKEN", "")
+    return token

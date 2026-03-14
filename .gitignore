@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+xieji# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -154,6 +154,8 @@ Sales_Summary_*.csv
 
 # Firebase and Google Cloud credentials
 *.json
+!functions/package.json
+!functions/.eslintrc.json
 serviceAccountKey.json
 serviceAccountKey_members.json
 firebase_env.txt

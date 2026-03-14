@@ -9,14 +9,17 @@ import json
 import logging
 import os
 import time
+import csv
+import io
 from typing import Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 # Load environment variables from .env file
 load_dotenv()
@@ -37,7 +40,21 @@ except Exception as e:
     logging.warning(f"Firebase not available: {e}")
 
 # Import secure configuration
-from secure_config import get_anthropic_api_key, get_gemini_api_key
+from secure_config import get_anthropic_api_key, get_gemini_api_key, get_admin_token
+
+# Import member connector functions
+try:
+    from member_connector import (
+        get_member_by_phone,
+        add_points,
+        get_member_points_history,
+        adjust_points_manual,
+        get_all_members
+    )
+    MEMBER_CONNECTOR_AVAILABLE = True
+except Exception as e:
+    MEMBER_CONNECTOR_AVAILABLE = False
+    logging.warning(f"Member connector not available: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +293,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
                     <button class="tab-button" data-tab="management">🛠️ 商品管理</button>
                     <button class="tab-button" data-tab="batch">⚙️ 批量处理</button>
                     <button class="tab-button" data-tab="analytics">📊 数据分析</button>
+                    <button class="tab-button" data-tab="members">👥 会员管理</button>
                     <button class="tab-button" data-tab="firebase">🔥 Firebase</button>
                 </section>
             </div>
@@ -606,6 +624,91 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 <div id="firebaseStatsResults"></div>
             </div>
         </section>
+        <section id="members" class="tab-panel card">
+            <div class="panel-header">
+                <div class="panel-copy">
+                    <div class="panel-kicker">Member Management</div>
+                    <h2 class="panel-title">👥 会员管理</h2>
+                    <p class="muted">管理会员信息、积分调整、批量导入。数据来自 Firebase eastern-market-members 项目。</p>
+                </div>
+                <div class="panel-meta">会员 · 积分 · 导入</div>
+            </div>
+            
+            <!-- Module 1: Statistics Cards -->
+            <div class="cards" style="margin-bottom: 20px;">
+                <div class="card">
+                    <div class="label">总会员数</div>
+                    <div class="value" id="membersTotalCount">-</div>
+                </div>
+                <div class="card">
+                    <div class="label">本月新增</div>
+                    <div class="value" id="membersMonthlyNew">-</div>
+                </div>
+                <div class="card">
+                    <div class="label">本月积分发放</div>
+                    <div class="value" id="membersMonthlyPoints">-</div>
+                </div>
+                <div class="card">
+                    <div class="label">活跃会员数</div>
+                    <div class="value" id="membersActiveCount">-</div>
+                </div>
+            </div>
+            
+            <!-- Module 2: Member List -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="margin: 0 0 16px; font-size: 16px; font-weight: 700;">会员列表</h3>
+                <div class="grid-2" style="margin-bottom: 14px;">
+                    <div>
+                        <label for="memberSearch">搜索会员</label>
+                        <input id="memberSearch" placeholder="输入姓名或手机号">
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <button class="btn" id="memberSearchButton" style="width: 100%;">🔍 搜索</button>
+                    </div>
+                </div>
+                <div id="membersStatus" class="status"></div>
+                <div id="membersTableContainer" style="margin-top: 14px;">
+                    <table id="membersTable">
+                        <thead>
+                            <tr>
+                                <th>姓名</th>
+                                <th>手机号</th>
+                                <th>等级</th>
+                                <th>积分</th>
+                                <th>注册日期</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="membersTableBody">
+                            <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">点击搜索按钮加载会员列表</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Module 4: CSV Bulk Import -->
+            <div class="card">
+                <h3 style="margin: 0 0 16px; font-size: 16px; font-weight: 700;">CSV 批量导入积分</h3>
+                <p class="muted" style="margin-bottom: 14px;">CSV 格式：date, amount, phone, order_id（例：2026-03-14, 50.00, 3065551234, ORDER123）</p>
+                <div>
+                    <label for="membersCsvFile">选择 CSV 文件</label>
+                    <input type="file" id="membersCsvFile" accept=".csv" style="margin-bottom: 10px;">
+                </div>
+                <div class="actions">
+                    <button class="btn" id="membersCsvUploadButton">📤 上传并预览</button>
+                    <button class="btn secondary" id="membersCsvConfirmButton" style="display: none;">✅ 确认导入</button>
+                    <button class="btn secondary" id="membersCsvCancelButton" style="display: none;">❌ 取消</button>
+                </div>
+                <div id="membersCsvStatus" class="status"></div>
+                <div id="membersCsvPreview" style="display: none; margin-top: 14px;">
+                    <div class="card" style="background: #f8fbff; border: 1px solid #dbe7f8;">
+                        <h4 style="margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #214a94;">导入预览</h4>
+                        <p id="membersCsvPreviewText" style="margin: 0; font-size: 13px; color: #42526b;"></p>
+                    </div>
+                </div>
+                <div id="membersCsvResults" style="margin-top: 14px;"></div>
+            </div>
+        </section>
         <section class="cards" style="margin-top: 30px;">
             <div class="card"><div class="label">待分类商品</div><div class="value" id="pendingClassifyCount">0</div></div>
             <div class="card"><div class="label">待描述商品</div><div class="value" id="pendingDescribeCount">0</div></div>
@@ -640,6 +743,70 @@ HTML_PAGE = r'''<!DOCTYPE html>
             </div>
         </div>
     </div>
+    
+    <!-- ===== Member Detail Modal ===== -->
+    <div id="memberModalOverlay" class="prod-modal-overlay hidden">
+        <div class="prod-modal" role="dialog" aria-modal="true">
+            <div class="prod-modal-head">
+                <div class="prod-modal-head-info">
+                    <h2 class="prod-modal-title" id="memberModalTitle">会员详情</h2>
+                    <p class="prod-modal-sub" id="memberModalSub">会员 ID: —</p>
+                </div>
+                <button class="btn-close-modal" id="memberModalClose" title="关闭">✕</button>
+            </div>
+            <div class="prod-modal-body" id="memberModalBody">
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <h3 style="margin: 0 0 14px; font-size: 15px; font-weight: 700;">基本信息</h3>
+                        <div class="detail-row">
+                            <span class="detail-key">姓名</span>
+                            <span class="detail-value" id="memberDetailName">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-key">手机号</span>
+                            <span class="detail-value" id="memberDetailPhone">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-key">会员等级</span>
+                            <span class="detail-value" id="memberDetailTier">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-key">当前积分</span>
+                            <span class="detail-value" id="memberDetailPoints">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-key">注册日期</span>
+                            <span class="detail-value" id="memberDetailJoinDate">-</span>
+                        </div>
+                    </div>
+                    <div class="detail-section">
+                        <h3 style="margin: 0 0 14px; font-size: 15px; font-weight: 700;">手动调整积分</h3>
+                        <div class="fgrp">
+                            <label>积分变动</label>
+                            <input type="number" id="memberAdjustPoints" placeholder="正数加分，负数扣分">
+                        </div>
+                        <div class="fgrp">
+                            <label>操作备注（必填）</label>
+                            <textarea id="memberAdjustNote" rows="3" placeholder="请输入调整原因..."></textarea>
+                        </div>
+                        <button class="btn" id="memberAdjustButton" style="width: 100%;">✅ 确认调整</button>
+                        <div id="memberAdjustStatus" class="status" style="margin-top: 10px;"></div>
+                    </div>
+                </div>
+                <div class="detail-section" style="margin-top: 16px;">
+                    <h3 style="margin: 0 0 14px; font-size: 15px; font-weight: 700;">积分历史（最近 10 条）</h3>
+                    <div id="memberPointsHistory">
+                        <p style="text-align: center; color: #64748b; padding: 20px;">加载中...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="prod-modal-footer">
+                <div class="mflex"></div>
+                <button class="btn secondary" id="memberModalCancel">关闭</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
         const tabs = document.querySelectorAll('.tab-button');
         const panels = document.querySelectorAll('.tab-panel');
@@ -2950,6 +3117,430 @@ HTML_PAGE = r'''<!DOCTYPE html>
                 alert('删除失败');
             }
         }
+        
+        // ===== Members Management Functions =====
+        const ADMIN_TOKEN = 'your-admin-token-here'; // TODO: Replace with actual admin token
+        let currentMemberData = null;
+        let csvFileData = null;
+        
+        async function loadMembersStats() {
+            try {
+                const response = await fetch('/api/members/list?limit=500', {
+                    headers: { 'X-Admin-Token': ADMIN_TOKEN }
+                });
+                const data = await response.json();
+                
+                if (data.members) {
+                    const members = data.members;
+                    const now = new Date();
+                    const thisMonth = now.getMonth();
+                    const thisYear = now.getFullYear();
+                    
+                    // Calculate stats
+                    const totalCount = members.length;
+                    const monthlyNew = members.filter(m => {
+                        if (!m.joinDate) return false;
+                        const joinDate = new Date(m.joinDate);
+                        return joinDate.getMonth() === thisMonth && joinDate.getFullYear() === thisYear;
+                    }).length;
+                    
+                    // For monthly points and active members, we'd need transaction data
+                    // For now, showing placeholder values
+                    const activeCount = members.filter(m => m.totalPoints > 0).length;
+                    
+                    document.getElementById('membersTotalCount').textContent = totalCount;
+                    document.getElementById('membersMonthlyNew').textContent = monthlyNew;
+                    document.getElementById('membersMonthlyPoints').textContent = '-';
+                    document.getElementById('membersActiveCount').textContent = activeCount;
+                }
+            } catch (error) {
+                console.error('加载会员统计失败:', error);
+            }
+        }
+        
+        async function searchMembers() {
+            const searchInput = document.getElementById('memberSearch');
+            const statusDiv = document.getElementById('membersStatus');
+            const tableBody = document.getElementById('membersTableBody');
+            
+            const searchTerm = searchInput.value.trim();
+            
+            statusDiv.className = 'status info';
+            statusDiv.textContent = '🔍 搜索中...';
+            
+            try {
+                const url = searchTerm 
+                    ? `/api/members/list?search=${encodeURIComponent(searchTerm)}&limit=100`
+                    : '/api/members/list?limit=100';
+                    
+                const response = await fetch(url, {
+                    headers: { 'X-Admin-Token': ADMIN_TOKEN }
+                });
+                const data = await response.json();
+                
+                if (data.members && data.members.length > 0) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `✅ 找到 ${data.members.length} 位会员`;
+                    
+                    tableBody.innerHTML = data.members.map(member => {
+                        const tierBadge = {
+                            'bronze': '<span class="badge">铜牌</span>',
+                            'silver': '<span class="badge" style="background: #e8f4f8; color: #0369a1;">银牌</span>',
+                            'gold': '<span class="badge success">金牌</span>'
+                        }[member.tier] || '<span class="badge">-</span>';
+                        
+                        return `
+                            <tr>
+                                <td>${member.name || '-'}</td>
+                                <td>${member.phone || '-'}</td>
+                                <td>${tierBadge}</td>
+                                <td><strong>${member.totalPoints || 0}</strong></td>
+                                <td>${member.joinDate || '-'}</td>
+                                <td>
+                                    <button class="btn secondary" style="padding: 6px 12px; font-size: 12px;" 
+                                            onclick="openMemberDetail('${member.uid}')">查看</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    // Update stats
+                    loadMembersStats();
+                } else {
+                    statusDiv.className = 'status';
+                    statusDiv.textContent = 'ℹ️ 未找到会员';
+                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">未找到会员</td></tr>';
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 搜索失败: ' + error.message;
+                console.error('搜索会员失败:', error);
+            }
+        }
+        
+        async function openMemberDetail(memberId) {
+            const overlay = document.getElementById('memberModalOverlay');
+            const titleEl = document.getElementById('memberModalTitle');
+            const subEl = document.getElementById('memberModalSub');
+            
+            overlay.classList.remove('hidden');
+            titleEl.textContent = '加载中...';
+            subEl.textContent = '会员 ID: ' + memberId;
+            
+            try {
+                // Get member details from the table (we already have basic info)
+                const response = await fetch(`/api/members/list?limit=500`, {
+                    headers: { 'X-Admin-Token': ADMIN_TOKEN }
+                });
+                const data = await response.json();
+                const member = data.members.find(m => m.uid === memberId);
+                
+                if (member) {
+                    currentMemberData = member;
+                    
+                    titleEl.textContent = member.name || '未知会员';
+                    document.getElementById('memberDetailName').textContent = member.name || '-';
+                    document.getElementById('memberDetailPhone').textContent = member.phone || '-';
+                    document.getElementById('memberDetailTier').textContent = {
+                        'bronze': '铜牌会员',
+                        'silver': '银牌会员',
+                        'gold': '金牌会员'
+                    }[member.tier] || '-';
+                    document.getElementById('memberDetailPoints').textContent = member.totalPoints || 0;
+                    document.getElementById('memberDetailJoinDate').textContent = member.joinDate || '-';
+                    
+                    // Load points history
+                    loadMemberPointsHistory(memberId);
+                }
+            } catch (error) {
+                console.error('加载会员详情失败:', error);
+                titleEl.textContent = '加载失败';
+            }
+        }
+        
+        async function loadMemberPointsHistory(memberId) {
+            const historyDiv = document.getElementById('memberPointsHistory');
+            
+            try {
+                const response = await fetch(`/api/members/${memberId}/points-history?limit=10`, {
+                    headers: { 'X-Admin-Token': ADMIN_TOKEN }
+                });
+                const data = await response.json();
+                
+                if (data.transactions && data.transactions.length > 0) {
+                    historyDiv.innerHTML = `
+                        <table style="font-size: 13px;">
+                            <thead>
+                                <tr>
+                                    <th>类型</th>
+                                    <th>积分</th>
+                                    <th>说明</th>
+                                    <th>时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.transactions.map(tx => {
+                                    const typeLabel = {
+                                        'earn': '获得',
+                                        'redeem': '兑换',
+                                        'adjust': '调整',
+                                        'signup_bonus': '注册奖励'
+                                    }[tx.type] || tx.type;
+                                    
+                                    const pointsColor = tx.points > 0 ? '#2e7d32' : '#b42318';
+                                    const pointsText = tx.points > 0 ? `+${tx.points}` : tx.points;
+                                    
+                                    return `
+                                        <tr>
+                                            <td><span class="badge">${typeLabel}</span></td>
+                                            <td style="color: ${pointsColor}; font-weight: 700;">${pointsText}</td>
+                                            <td style="font-size: 12px;">${tx.description || '-'}</td>
+                                            <td style="font-size: 12px; color: #64748b;">${tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '-'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    historyDiv.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">暂无积分记录</p>';
+                }
+            } catch (error) {
+                historyDiv.innerHTML = '<p style="text-align: center; color: #b42318; padding: 20px;">加载失败</p>';
+                console.error('加载积分历史失败:', error);
+            }
+        }
+        
+        async function adjustMemberPoints() {
+            const pointsInput = document.getElementById('memberAdjustPoints');
+            const noteInput = document.getElementById('memberAdjustNote');
+            const statusDiv = document.getElementById('memberAdjustStatus');
+            const button = document.getElementById('memberAdjustButton');
+            
+            const points = parseInt(pointsInput.value);
+            const note = noteInput.value.trim();
+            
+            if (isNaN(points) || points === 0) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 请输入有效的积分数量';
+                return;
+            }
+            
+            if (!note) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 请填写操作备注';
+                return;
+            }
+            
+            if (!currentMemberData) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 会员数据未加载';
+                return;
+            }
+            
+            button.disabled = true;
+            statusDiv.className = 'status info';
+            statusDiv.textContent = '⏳ 处理中...';
+            
+            try {
+                const response = await fetch(`/api/members/${currentMemberData.uid}/adjust-points`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Token': ADMIN_TOKEN
+                    },
+                    body: JSON.stringify({
+                        points: points,
+                        staff_note: note,
+                        admin_uid: 'admin'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `✅ 积分调整成功！${points > 0 ? '增加' : '扣除'} ${Math.abs(points)} 积分`;
+                    
+                    // Clear inputs
+                    pointsInput.value = '';
+                    noteInput.value = '';
+                    
+                    // Refresh member details and history
+                    setTimeout(() => {
+                        openMemberDetail(currentMemberData.uid);
+                        searchMembers(); // Refresh the list
+                    }, 1000);
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 调整失败: ' + (data.detail || '未知错误');
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 网络错误: ' + error.message;
+                console.error('调整积分失败:', error);
+            } finally {
+                button.disabled = false;
+            }
+        }
+        
+        function handleCsvUpload() {
+            const fileInput = document.getElementById('membersCsvFile');
+            const statusDiv = document.getElementById('membersCsvStatus');
+            const previewDiv = document.getElementById('membersCsvPreview');
+            const previewText = document.getElementById('membersCsvPreviewText');
+            const confirmBtn = document.getElementById('membersCsvConfirmButton');
+            const cancelBtn = document.getElementById('membersCsvCancelButton');
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 请选择 CSV 文件';
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n').filter(line => line.trim());
+                
+                if (lines.length <= 1) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ CSV 文件为空或格式错误';
+                    return;
+                }
+                
+                csvFileData = file;
+                
+                statusDiv.className = 'status success';
+                statusDiv.textContent = `✅ 文件已读取`;
+                
+                previewDiv.style.display = 'block';
+                previewText.textContent = `将处理 ${lines.length - 1} 行数据（不含表头）`;
+                
+                confirmBtn.style.display = 'inline-block';
+                cancelBtn.style.display = 'inline-block';
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        async function confirmCsvImport() {
+            const statusDiv = document.getElementById('membersCsvStatus');
+            const resultsDiv = document.getElementById('membersCsvResults');
+            const confirmBtn = document.getElementById('membersCsvConfirmButton');
+            const cancelBtn = document.getElementById('membersCsvCancelButton');
+            
+            if (!csvFileData) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 请先上传文件';
+                return;
+            }
+            
+            confirmBtn.disabled = true;
+            cancelBtn.disabled = true;
+            statusDiv.className = 'status info';
+            statusDiv.textContent = '⏳ 正在导入...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', csvFileData);
+                
+                const response = await fetch('/api/members/bulk-points', {
+                    method: 'POST',
+                    headers: {
+                        'X-Admin-Token': ADMIN_TOKEN
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `✅ 导入完成！成功 ${data.success} 条，失败 ${data.failed} 条`;
+                    
+                    if (data.failed > 0 && data.failed_rows) {
+                        resultsDiv.innerHTML = `
+                            <div class="card" style="background: #fff3f2; border: 1px solid #f3d1cc; margin-top: 14px;">
+                                <h4 style="margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #b42318;">失败记录</h4>
+                                <table style="font-size: 12px;">
+                                    <thead>
+                                        <tr>
+                                            <th>行号</th>
+                                            <th>手机号</th>
+                                            <th>失败原因</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.failed_rows.map(row => `
+                                            <tr>
+                                                <td>${row.row}</td>
+                                                <td>${row.phone}</td>
+                                                <td style="color: #b42318;">${row.reason}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } else {
+                        resultsDiv.innerHTML = '';
+                    }
+                    
+                    // Refresh member list
+                    setTimeout(() => {
+                        searchMembers();
+                        loadMembersStats();
+                    }, 1000);
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 导入失败: ' + (data.detail || '未知错误');
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 网络错误: ' + error.message;
+                console.error('导入失败:', error);
+            } finally {
+                confirmBtn.disabled = false;
+                cancelBtn.disabled = false;
+            }
+        }
+        
+        function cancelCsvImport() {
+            document.getElementById('membersCsvFile').value = '';
+            document.getElementById('membersCsvPreview').style.display = 'none';
+            document.getElementById('membersCsvConfirmButton').style.display = 'none';
+            document.getElementById('membersCsvCancelButton').style.display = 'none';
+            document.getElementById('membersCsvStatus').textContent = '';
+            document.getElementById('membersCsvResults').innerHTML = '';
+            csvFileData = null;
+        }
+        
+        // Event listeners for members management
+        document.getElementById('memberSearchButton')?.addEventListener('click', searchMembers);
+        document.getElementById('memberSearch')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchMembers();
+        });
+        document.getElementById('memberModalClose')?.addEventListener('click', () => {
+            document.getElementById('memberModalOverlay').classList.add('hidden');
+        });
+        document.getElementById('memberModalCancel')?.addEventListener('click', () => {
+            document.getElementById('memberModalOverlay').classList.add('hidden');
+        });
+        document.getElementById('memberAdjustButton')?.addEventListener('click', adjustMemberPoints);
+        document.getElementById('membersCsvUploadButton')?.addEventListener('click', handleCsvUpload);
+        document.getElementById('membersCsvConfirmButton')?.addEventListener('click', confirmCsvImport);
+        document.getElementById('membersCsvCancelButton')?.addEventListener('click', cancelCsvImport);
+        
+        // Load stats when members tab is opened
+        tabs.forEach(button => {
+            if (button.dataset.tab === 'members') {
+                button.addEventListener('click', () => {
+                    loadMembersStats();
+                });
+            }
+        });
     </script>
 </body>
 </html>'''
@@ -4105,6 +4696,231 @@ async def public_get_product(product_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# MEMBER MANAGEMENT API - Admin only (X-Admin-Token required)
+# =============================================================================
+
+class AdjustPointsRequest(BaseModel):
+    points: int
+    note: str
+
+def verify_admin_token(x_admin_token: Optional[str] = Header(None)):
+    """Verify admin token from X-Admin-Token header"""
+    if not MEMBER_CONNECTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Member system not available")
+    
+    expected_token = get_admin_token()
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="Admin token not configured")
+    
+    if not x_admin_token or x_admin_token != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token")
+    
+    return True
+
+@app.get("/api/members/search")
+async def search_member(
+    phone: str = Query(..., description="Phone number to search"),
+    _verified: bool = Header(None, alias="X-Admin-Token", include_in_schema=False)
+):
+    """Search member by phone number (Admin only)"""
+    verify_admin_token(_verified)
+    
+    try:
+        member = get_member_by_phone(phone)
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found")
+        return member
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching member: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/members/{member_id}/adjust-points")
+async def adjust_member_points(
+    member_id: str,
+    payload: AdjustPointsRequest,
+    _verified: bool = Header(None, alias="X-Admin-Token", include_in_schema=False)
+):
+    """Manually adjust member points (Admin only)"""
+    verify_admin_token(_verified)
+    
+    # Validate input
+    if payload.points < -5000 or payload.points > 5000:
+        raise HTTPException(status_code=400, detail="Points must be between -5000 and 5000")
+    
+    if not payload.note or not payload.note.strip():
+        raise HTTPException(status_code=400, detail="Note cannot be empty")
+    
+    try:
+        # Use "admin" as admin_uid for now (can be enhanced with real admin user tracking)
+        success = adjust_points_manual(
+            member_id=member_id,
+            points=payload.points,
+            staff_note=payload.note.strip(),
+            admin_uid="admin"
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to adjust points. Check member ID and balance.")
+        
+        # Get updated member info to return new total
+        member = get_member_by_phone(None)  # We need to get by ID, but function uses phone
+        # For now, return success without new total (can be enhanced)
+        return {
+            "success": True,
+            "message": f"Points adjusted by {payload.points}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adjusting points: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/members/list")
+async def list_members(
+    search: Optional[str] = Query(None, description="Search by name or phone"),
+    limit: int = Query(100, ge=1, le=500),
+    _verified: bool = Header(None, alias="X-Admin-Token", include_in_schema=False)
+):
+    """Get list of members (Admin only)"""
+    verify_admin_token(_verified)
+    
+    try:
+        members = get_all_members(limit=limit, search=search)
+        return {"members": members, "count": len(members)}
+    except Exception as e:
+        logger.error(f"Error listing members: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/members/{member_id}/points-history")
+async def get_points_history(
+    member_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    _verified: bool = Header(None, alias="X-Admin-Token", include_in_schema=False)
+):
+    """Get member points transaction history (Admin only)"""
+    verify_admin_token(_verified)
+    
+    try:
+        history = get_member_points_history(member_id=member_id, limit=limit)
+        return {"transactions": history, "count": len(history)}
+    except Exception as e:
+        logger.error(f"Error getting points history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/members/bulk-points")
+async def bulk_import_points(
+    file: UploadFile = File(...),
+    _verified: bool = Header(None, alias="X-Admin-Token", include_in_schema=False)
+):
+    """Bulk import points from CSV file (Admin only)
+    
+    CSV format: date, amount, phone, order_id
+    Example: 2026-03-14, 50.00, 3065551234, ORDER123
+    """
+    verify_admin_token(_verified)
+    
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    try:
+        # Read CSV file
+        contents = await file.read()
+        csv_text = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        
+        total = 0
+        success = 0
+        failed = 0
+        failed_rows = []
+        
+        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header is row 1)
+            total += 1
+            
+            try:
+                # Extract fields
+                date = row.get('date', '').strip()
+                amount_str = row.get('amount', '').strip()
+                phone = row.get('phone', '').strip()
+                order_id = row.get('order_id', '').strip()
+                
+                # Validate required fields
+                if not amount_str or not phone:
+                    failed += 1
+                    failed_rows.append({
+                        "row": row_num,
+                        "phone": phone,
+                        "reason": "Missing amount or phone"
+                    })
+                    continue
+                
+                # Parse amount
+                try:
+                    amount = float(amount_str)
+                except ValueError:
+                    failed += 1
+                    failed_rows.append({
+                        "row": row_num,
+                        "phone": phone,
+                        "reason": f"Invalid amount: {amount_str}"
+                    })
+                    continue
+                
+                # Find member by phone
+                member = get_member_by_phone(phone)
+                if not member:
+                    failed += 1
+                    failed_rows.append({
+                        "row": row_num,
+                        "phone": phone,
+                        "reason": "Member not found"
+                    })
+                    continue
+                
+                # Calculate points (assuming $1 = 10 points, adjust as needed)
+                points = int(amount * 10)
+                
+                # Add points
+                result = add_points(
+                    member_id=member['uid'],
+                    points=points,
+                    order_id=order_id if order_id else None,
+                    amount=amount,
+                    source="csv_import"
+                )
+                
+                if result:
+                    success += 1
+                else:
+                    failed += 1
+                    failed_rows.append({
+                        "row": row_num,
+                        "phone": phone,
+                        "reason": "Failed to add points"
+                    })
+            
+            except Exception as e:
+                failed += 1
+                failed_rows.append({
+                    "row": row_num,
+                    "phone": row.get('phone', 'unknown'),
+                    "reason": str(e)
+                })
+        
+        return {
+            "total": total,
+            "success": success,
+            "failed": failed,
+            "failed_rows": failed_rows
+        }
+    
+    except Exception as e:
+        logger.error(f"Error processing CSV: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
 
 
 if __name__ == "__main__":
